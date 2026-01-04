@@ -29,3 +29,7 @@ export class NodeRegistry {
 
 // Singleton instance
 export const nodeRegistry = new NodeRegistry();
+
+// Auto-register built-in nodes
+import { TriggerNode } from './trigger';
+nodeRegistry.register(new TriggerNode());
