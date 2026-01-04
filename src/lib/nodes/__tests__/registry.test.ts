@@ -66,4 +66,20 @@ describe('NodeRegistry', () => {
     registry.register(mockNode);
     expect(() => registry.register(mockNode)).toThrow('already registered');
   });
+
+  it('filters nodes by category', () => {
+    const contentNode = { ...mockNode, meta: { ...mockNode.meta, id: 'content-node', category: 'content' as const } };
+    const triggerNode = { ...mockNode, meta: { ...mockNode.meta, id: 'trigger-node', category: 'trigger' as const } };
+
+    registry.register(contentNode);
+    registry.register(triggerNode);
+
+    const contentNodes = registry.listByCategory('content');
+    expect(contentNodes).toHaveLength(1);
+    expect(contentNodes[0].meta.id).toBe('content-node');
+
+    const triggerNodes = registry.listByCategory('trigger');
+    expect(triggerNodes).toHaveLength(1);
+    expect(triggerNodes[0].meta.id).toBe('trigger-node');
+  });
 });
