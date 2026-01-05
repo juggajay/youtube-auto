@@ -6,9 +6,35 @@ import type { ResolvedConfig } from '@/lib/config/types';
 
 export interface TriggerOutput {
   topic: string;
-  archetypeId: string;
+  archetypeId?: string;  // Optional - archetypes are UI presets, not constraints
   sourceType: 'manual' | 'scheduled' | 'webhook' | 'nicheradar';
   sourceData?: Record<string, unknown>;
+
+  // Script Node inputs - set by UI before run starts
+  // Archetypes pre-fill these, but users can customize
+  structure?: {
+    sections: {
+      id: string;
+      name: string;
+      purpose: string;
+      targetDuration?: number;
+      required: boolean;
+      notes?: string;
+    }[];
+    turnPlacement?: number;
+    totalDuration: { min: number; max: number };
+  };
+  rules?: {
+    alwaysInclude?: string[];
+    neverInclude?: string[];
+    tone?: string;
+    vocabulary?: {
+      useJargon?: boolean;
+      bannedWords?: string[];
+      preferredPhrases?: string[];
+    };
+    customInstructions?: string;
+  };
 }
 
 export interface ResearchOutput {

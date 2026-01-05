@@ -32,4 +32,7 @@ export const nodeRegistry = new NodeRegistry();
 
 // Auto-register built-in nodes
 import { TriggerNode } from './trigger';
+import { ScriptGeneratorNode } from './script';
+
 nodeRegistry.register(new TriggerNode());
+nodeRegistry.register(new ScriptGeneratorNode());
