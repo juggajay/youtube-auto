@@ -115,7 +115,13 @@ export const ThumbnailConfigSchema = z.object({
   dalleQuality: z.enum(['standard', 'hd']).default('hd'),
 
   // Style guide (from project settings)
-  styleGuide: ThumbnailStyleGuideSchema.default({}),
+  styleGuide: ThumbnailStyleGuideSchema.default({
+    dimensions: { width: 1280, height: 720 },
+    colors: { primary: '#2563EB', secondary: '#1E293B', text: '#FFFFFF', accent: '#F59E0B' },
+    typography: { fontFamily: 'Inter', maxWords: 4, textPosition: 'dynamic', textStyle: 'bold' },
+    style: { backgroundType: 'generated', mood: 'professional', includeFace: false, faceExpression: 'none' },
+    elements: { useArrows: false, useCircles: false, useIcons: true, useBorder: false, useEmoji: false },
+  }),
 
   // Generation settings
   defaultCount: z.number().default(3),

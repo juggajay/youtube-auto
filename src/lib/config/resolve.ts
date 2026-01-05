@@ -18,9 +18,9 @@ export function resolveConfig(sources: ConfigSource[]): ResolvedConfig {
   );
 
   const resolved = sorted.reduce(
-    (acc, source) => deepMerge(acc, source.config as Record<string, unknown>),
-    getSystemDefaults() as Record<string, unknown>
-  ) as ResolvedConfig;
+    (acc, source) => deepMerge(acc, source.config as unknown as Record<string, unknown>),
+    getSystemDefaults() as unknown as Record<string, unknown>
+  ) as unknown as ResolvedConfig;
 
   const validation = validateResolvedConfig(resolved);
   if (!validation.valid) {

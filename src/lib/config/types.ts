@@ -78,6 +78,8 @@ export interface ResolvedConfig {
     typography: { font_family: string; max_words: number; text_position: string };
     style: { background_type: string; include_face: boolean; overall_mood: string };
     elements: { use_arrows: boolean; use_circles: boolean; use_icons: boolean };
+    defaultCount?: number;
+    generator?: 'gemini' | 'dalle' | 'flux';
   };
 
   assembly: {

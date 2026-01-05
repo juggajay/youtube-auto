@@ -23,6 +23,8 @@ export function getSystemDefaults(): ResolvedConfig {
       typography: { font_family: 'Inter', max_words: 4, text_position: 'dynamic' },
       style: { background_type: 'generated', include_face: false, overall_mood: 'professional' },
       elements: { use_arrows: false, use_circles: false, use_icons: true },
+      defaultCount: 3,
+      generator: 'gemini',
     },
     assembly: {
       resolution: '1080p',

@@ -59,7 +59,7 @@ export class ThumbnailGeneratorNode implements NodeContract<
       keyPoints: script.sections.map((s: { name: string }) => s.name),
       overlayText: extractOverlayText(script.title, maxWords),
       count: context.config.thumbnail?.defaultCount ?? 3,
-      styleOverride: context.runOverrides.nodeOverrides?.thumbnail?.styleOverride as ThumbnailInput['styleOverride'],
+      styleOverride: (context.runOverrides.nodeOverrides?.['thumbnail'] as { styleOverride?: ThumbnailInput['styleOverride'] } | undefined)?.styleOverride,
     };
   }
 

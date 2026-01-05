@@ -90,7 +90,7 @@ export class PipelineOrchestrator extends EventEmitter {
         await this.executeNode(nodeConfig);
 
         // Status may have changed during node execution - check current state
-        const currentStatus = this.context.status;
+        const currentStatus = this.context.status as RunStatus;
         if (currentStatus === 'awaiting_review') {
           return this.context;
         }

@@ -54,21 +54,21 @@ export class VoiceGeneratorNode implements NodeContract<
       {
         id: 'hook',
         name: 'Hook',
-        text: script.hook.content,
+        text: script.hook.text,
         order: 0,
       },
       // Main sections
-      ...script.sections.map((section: { id: string; name: string; content: string }, index: number) => ({
+      ...script.sections.map((section: { id: string; name: string; script: string }, index: number) => ({
         id: section.id,
         name: section.name,
-        text: section.content,
+        text: section.script,
         order: index + 1,
       })),
       // Outro
       {
         id: 'outro',
         name: 'Outro',
-        text: script.outro.content,
+        text: `${script.outro.text} ${script.outro.cta}`,
         order: script.sections.length + 1,
       },
     ];
