@@ -33,6 +33,8 @@ export const nodeRegistry = new NodeRegistry();
 // Auto-register built-in nodes
 import { TriggerNode } from './trigger';
 import { ScriptGeneratorNode } from './script';
+import { VoiceGeneratorNode } from './voice';
 
 nodeRegistry.register(new TriggerNode());
 nodeRegistry.register(new ScriptGeneratorNode());
+nodeRegistry.register(new VoiceGeneratorNode());

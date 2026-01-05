@@ -159,7 +159,14 @@ export interface DatabaseClient {
 }
 
 export interface StorageClient {
-  // To be implemented
+  upload(path: string, data: Buffer | Blob | File, options?: {
+    contentType?: string;
+    upsert?: boolean;
+  }): Promise<{ data: { path: string } | null; error: { message: string } | null }>;
+
+  getPublicUrl(path: string): { data: { publicUrl: string } };
+
+  remove(paths: string[]): Promise<{ error: { message: string } | null }>;
 }
 
 export interface CredentialManager {
