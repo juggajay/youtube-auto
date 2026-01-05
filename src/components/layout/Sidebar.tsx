@@ -2,9 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useAuth } from '@/components/providers/AuthProvider'
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { user, signOut } = useAuth()
 
   return (
     <aside className="sidebar">
@@ -66,11 +68,24 @@ export function Sidebar() {
 
       <div className="sidebar-footer">
         <div className="user-card">
-          <div className="user-avatar" aria-hidden="true"></div>
+          <div className="user-avatar" aria-hidden="true">
+            {user?.email?.charAt(0).toUpperCase()}
+          </div>
           <div className="user-info">
-            <div className="user-name">Creator Studio</div>
+            <div className="user-name">{user?.email?.split('@')[0] || 'User'}</div>
             <div className="user-plan">Pro Plan</div>
           </div>
+          <button
+            onClick={signOut}
+            className="sign-out-btn"
+            title="Sign out"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+          </button>
         </div>
       </div>
     </aside>
