@@ -1,0 +1,1218 @@
+# Thumbnail Node Implementation Instructions
+
+## Context
+
+VidFlow now has:
+- Core infrastructure ✅
+- Trigger Node ✅
+- Script Node ✅
+- Voice Node ✅
+- 115 tests passing
+
+The Thumbnail Node generates YouTube thumbnails based on the video title and style configuration.
+
+---
+
+## Overview
+
+The Thumbnail Node:
+1. Receives title and topic context from Script Node
+2. Generates multiple thumbnail options (typically 3)
+3. Uses AI image generation (Gemini, DALL-E, or Flux)
+4. Applies brand style guidelines (colors, typography, layout)
+5. Returns image URLs for user selection or auto-selection
+
+---
+
+## File Structure
+
+```
+src/lib/nodes/thumbnail/
+├── index.ts              # ThumbnailGeneratorNode class
+├── types.ts              # Zod schemas
+├── generators/
+│   ├── index.ts          # Generator factory
+│   ├── gemini.ts         # Google Gemini Imagen
+│   ├── dalle.ts          # OpenAI DALL-E 3
+│   └── flux.ts           # Replicate Flux (optional)
+├── prompt-builder.ts     # Thumbnail prompt construction
+└── __tests__/
+    └── thumbnail.test.ts
+```
+
+---
+
+## Part 1: Thumbnail Types (types.ts)
+
+```typescript
+import { z } from 'zod';
+
+// === Style Guide ===
+
+export const ThumbnailColorsSchema = z.object({
+  primary: z.string().default('#2563EB'),      // Main brand color
+  secondary: z.string().default('#1E293B'),    // Background/accent
+  text: z.string().default('#FFFFFF'),         // Text color
+  accent: z.string().default('#F59E0B'),       // Highlight color
+});
+
+export const ThumbnailTypographySchema = z.object({
+  fontFamily: z.string().default('Inter'),
+  maxWords: z.number().default(4),             // Max words in thumbnail text
+  textPosition: z.enum(['top', 'bottom', 'left', 'right', 'center', 'dynamic']).default('dynamic'),
+  textStyle: z.enum(['bold', 'outline', 'shadow', 'gradient']).default('bold'),
+});
+
+export const ThumbnailStyleSchema = z.object({
+  backgroundType: z.enum(['generated', 'solid', 'gradient', 'image']).default('generated'),
+  mood: z.enum(['professional', 'energetic', 'dramatic', 'minimal', 'playful']).default('professional'),
+  includeFace: z.boolean().default(false),     // Include human face
+  faceExpression: z.enum(['surprised', 'excited', 'serious', 'curious', 'none']).default('none'),
+});
+
+export const ThumbnailElementsSchema = z.object({
+  useArrows: z.boolean().default(false),
+  useCircles: z.boolean().default(false),
+  useIcons: z.boolean().default(true),
+  useBorder: z.boolean().default(false),
+  useEmoji: z.boolean().default(false),
+});
+
+export const ThumbnailStyleGuideSchema = z.object({
+  dimensions: z.object({
+    width: z.number().default(1280),
+    height: z.number().default(720),
+  }),
+  colors: ThumbnailColorsSchema,
+  typography: ThumbnailTypographySchema,
+  style: ThumbnailStyleSchema,
+  elements: ThumbnailElementsSchema,
+});
+
+// === Input Schema ===
+
+export const ThumbnailInputSchema = z.object({
+  // From Script Node
+  title: z.string(),
+  topic: z.string(),
+  
+  // Optional context
+  keyPoints: z.array(z.string()).optional(),   // Key points from script for visual ideas
+  targetEmotion: z.string().optional(),        // "curiosity", "excitement", "shock"
+  
+  // Generation options
+  count: z.number().min(1).max(5).default(3),  // Number of options to generate
+  
+  // Text overlay (optional - can be different from title)
+  overlayText: z.string().optional(),
+  
+  // Style override for this run
+  styleOverride: ThumbnailStyleGuideSchema.partial().optional(),
+});
+
+// === Output Schema ===
+
+export const ThumbnailOptionSchema = z.object({
+  id: z.string(),
+  imageUrl: z.string(),                        // Supabase storage URL
+  imagePath: z.string(),                       // Storage path
+  prompt: z.string(),                          // Prompt used to generate
+  metadata: z.object({
+    generator: z.enum(['gemini', 'dalle', 'flux']),
+    dimensions: z.object({ width: z.number(), height: z.number() }),
+    hasTextOverlay: z.boolean(),
+  }),
+});
+
+export const ThumbnailOutputSchema = z.object({
+  options: z.array(ThumbnailOptionSchema),
+  selectedId: z.string().optional(),           // If auto-selected
+  styleGuideUsed: ThumbnailStyleGuideSchema,
+});
+
+// === Config Schema ===
+
+export const ThumbnailConfigSchema = z.object({
+  generator: z.enum(['gemini', 'dalle', 'flux']).default('gemini'),
+  
+  // Model-specific settings
+  geminiModel: z.string().default('imagen-3.0-generate-002'),
+  dalleModel: z.enum(['dall-e-3', 'dall-e-2']).default('dall-e-3'),
+  dalleQuality: z.enum(['standard', 'hd']).default('hd'),
+  
+  // Style guide (from project settings)
+  styleGuide: ThumbnailStyleGuideSchema,
+  
+  // Generation settings
+  defaultCount: z.number().default(3),
+  
+  // Text overlay
+  addTextOverlay: z.boolean().default(true),   // Add text to generated image
+  textOverlayMethod: z.enum(['ai', 'composite']).default('ai'),  // AI generates with text vs post-process
+  
+  // Retry settings
+  maxRetries: z.number().default(2),
+});
+
+export type ThumbnailInput = z.infer<typeof ThumbnailInputSchema>;
+export type ThumbnailOutput = z.infer<typeof ThumbnailOutputSchema>;
+export type ThumbnailConfig = z.infer<typeof ThumbnailConfigSchema>;
+export type ThumbnailStyleGuide = z.infer<typeof ThumbnailStyleGuideSchema>;
+export type ThumbnailOption = z.infer<typeof ThumbnailOptionSchema>;
+```
+
+---
+
+## Part 2: Prompt Builder (prompt-builder.ts)
+
+```typescript
+import { ThumbnailStyleGuide, ThumbnailInput } from './types';
+
+export interface ThumbnailPromptParams {
+  input: ThumbnailInput;
+  styleGuide: ThumbnailStyleGuide;
+  variationIndex: number;           // 0, 1, 2 for different variations
+  includeText: boolean;
+}
+
+/**
+ * Build a prompt for thumbnail generation.
+ * Creates variations by adjusting composition, angle, or emphasis.
+ */
+export function buildThumbnailPrompt(params: ThumbnailPromptParams): string {
+  const { input, styleGuide, variationIndex, includeText } = params;
+  
+  const parts: string[] = [];
+
+  // === Base Description ===
+  parts.push('YouTube thumbnail image, 16:9 aspect ratio, high quality, eye-catching');
+
+  // === Topic/Subject ===
+  parts.push(`Topic: ${input.topic}`);
+  
+  // === Mood ===
+  const moodDescriptions: Record<string, string> = {
+    professional: 'clean, polished, corporate feel',
+    energetic: 'dynamic, vibrant, high energy',
+    dramatic: 'bold contrast, cinematic lighting, intense',
+    minimal: 'simple, clean, lots of whitespace',
+    playful: 'fun, colorful, lighthearted',
+  };
+  parts.push(`Style: ${moodDescriptions[styleGuide.style.mood]}`);
+
+  // === Color Palette ===
+  parts.push(`Color scheme: primary ${styleGuide.colors.primary}, accent ${styleGuide.colors.accent}`);
+
+  // === Face/Character ===
+  if (styleGuide.style.includeFace) {
+    const expressions: Record<string, string> = {
+      surprised: 'person with surprised/shocked expression, wide eyes, open mouth',
+      excited: 'person with excited, happy expression, big smile',
+      serious: 'person with serious, thoughtful expression',
+      curious: 'person with curious, intrigued expression, raised eyebrow',
+      none: '',
+    };
+    if (styleGuide.style.faceExpression !== 'none') {
+      parts.push(expressions[styleGuide.style.faceExpression]);
+    }
+  }
+
+  // === Background ===
+  const bgDescriptions: Record<string, string> = {
+    generated: 'contextually relevant background',
+    solid: `solid ${styleGuide.colors.secondary} background`,
+    gradient: `gradient background from ${styleGuide.colors.primary} to ${styleGuide.colors.secondary}`,
+    image: 'relevant photo background',
+  };
+  parts.push(bgDescriptions[styleGuide.style.backgroundType]);
+
+  // === Elements ===
+  const elements: string[] = [];
+  if (styleGuide.elements.useArrows) elements.push('attention-grabbing arrows');
+  if (styleGuide.elements.useCircles) elements.push('highlight circles');
+  if (styleGuide.elements.useIcons) elements.push('relevant icons');
+  if (styleGuide.elements.useBorder) elements.push('bold border frame');
+  if (styleGuide.elements.useEmoji) elements.push('relevant emoji');
+  
+  if (elements.length > 0) {
+    parts.push(`Include: ${elements.join(', ')}`);
+  }
+
+  // === Text Overlay ===
+  if (includeText && input.overlayText) {
+    const textStyles: Record<string, string> = {
+      bold: 'bold, thick',
+      outline: 'outlined, stroke',
+      shadow: 'drop shadow',
+      gradient: 'gradient fill',
+    };
+    parts.push(`Text overlay: "${input.overlayText}" in large ${textStyles[styleGuide.typography.textStyle]} ${styleGuide.typography.fontFamily} font, ${styleGuide.colors.text} color`);
+    parts.push(`Text position: ${styleGuide.typography.textPosition}`);
+  }
+
+  // === Variation ===
+  const variations = [
+    'centered composition, balanced layout',
+    'dynamic angle, rule of thirds',
+    'close-up focus, dramatic crop',
+  ];
+  parts.push(`Composition: ${variations[variationIndex % variations.length]}`);
+
+  // === Target Emotion ===
+  if (input.targetEmotion) {
+    parts.push(`Evoke emotion: ${input.targetEmotion}`);
+  }
+
+  // === Negative Prompts (what to avoid) ===
+  const negatives = [
+    'blurry',
+    'low quality',
+    'watermark',
+    'text errors',
+    'distorted faces',
+    'cluttered',
+    'hard to read',
+  ];
+  parts.push(`Avoid: ${negatives.join(', ')}`);
+
+  return parts.join('. ');
+}
+
+/**
+ * Generate a shorter prompt for text overlay extraction
+ */
+export function extractOverlayText(title: string, maxWords: number): string {
+  // Remove common filler words and extract key phrases
+  const fillerWords = ['the', 'a', 'an', 'is', 'are', 'was', 'were', 'to', 'of', 'in', 'for', 'on', 'with'];
+  
+  const words = title
+    .split(/\s+/)
+    .filter(word => !fillerWords.includes(word.toLowerCase()));
+  
+  if (words.length <= maxWords) {
+    return words.join(' ');
+  }
+  
+  // Take first N words, prioritizing capitalized words
+  const prioritized = words.sort((a, b) => {
+    const aUpper = a[0] === a[0].toUpperCase() ? 1 : 0;
+    const bUpper = b[0] === b[0].toUpperCase() ? 1 : 0;
+    return bUpper - aUpper;
+  });
+  
+  return prioritized.slice(0, maxWords).join(' ');
+}
+```
+
+---
+
+## Part 3: Generator Interface & Implementations
+
+### generators/index.ts
+
+```typescript
+import { ThumbnailStyleGuide } from '../types';
+
+export interface GenerationParams {
+  prompt: string;
+  width: number;
+  height: number;
+  style?: string;
+}
+
+export interface GenerationResult {
+  imageBuffer: Buffer;
+  contentType: string;
+  revisedPrompt?: string;    // Some models revise the prompt
+}
+
+export interface ThumbnailGenerator {
+  name: string;
+  generate(params: GenerationParams): Promise<GenerationResult>;
+}
+
+export type GeneratorType = 'gemini' | 'dalle' | 'flux';
+
+export function createGenerator(
+  type: GeneratorType,
+  apiKey: string,
+  options?: Record<string, unknown>
+): ThumbnailGenerator {
+  switch (type) {
+    case 'gemini':
+      return new GeminiGenerator(apiKey, options);
+    case 'dalle':
+      return new DalleGenerator(apiKey, options);
+    case 'flux':
+      return new FluxGenerator(apiKey, options);
+    default:
+      throw new Error(`Unknown generator type: ${type}`);
+  }
+}
+```
+
+### generators/gemini.ts
+
+```typescript
+import { ThumbnailGenerator, GenerationParams, GenerationResult } from './index';
+
+export class GeminiGenerator implements ThumbnailGenerator {
+  name = 'gemini';
+  private apiKey: string;
+  private model: string;
+
+  constructor(apiKey: string, options?: { model?: string }) {
+    this.apiKey = apiKey;
+    this.model = options?.model ?? 'imagen-3.0-generate-002';
+  }
+
+  async generate(params: GenerationParams): Promise<GenerationResult> {
+    const { prompt, width, height } = params;
+
+    // Gemini Imagen API
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateImages`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': this.apiKey,
+        },
+        body: JSON.stringify({
+          prompt,
+          config: {
+            numberOfImages: 1,
+            aspectRatio: '16:9',
+            // Gemini may not support exact dimensions, uses aspect ratio
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Gemini generation failed: ${response.status} - ${error}`);
+    }
+
+    const data = await response.json();
+    
+    // Gemini returns base64 encoded images
+    const imageData = data.generatedImages?.[0]?.image?.imageBytes;
+    if (!imageData) {
+      throw new Error('No image generated');
+    }
+
+    return {
+      imageBuffer: Buffer.from(imageData, 'base64'),
+      contentType: 'image/png',
+    };
+  }
+}
+```
+
+### generators/dalle.ts
+
+```typescript
+import { ThumbnailGenerator, GenerationParams, GenerationResult } from './index';
+
+export class DalleGenerator implements ThumbnailGenerator {
+  name = 'dalle';
+  private apiKey: string;
+  private model: string;
+  private quality: 'standard' | 'hd';
+
+  constructor(apiKey: string, options?: { model?: string; quality?: 'standard' | 'hd' }) {
+    this.apiKey = apiKey;
+    this.model = options?.model ?? 'dall-e-3';
+    this.quality = options?.quality ?? 'hd';
+  }
+
+  async generate(params: GenerationParams): Promise<GenerationResult> {
+    const { prompt } = params;
+
+    const response = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.model,
+        prompt,
+        n: 1,
+        size: '1792x1024',  // Closest to 16:9 for DALL-E 3
+        quality: this.quality,
+        response_format: 'b64_json',
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(`DALL-E generation failed: ${error.error?.message ?? response.status}`);
+    }
+
+    const data = await response.json();
+    const imageData = data.data?.[0]?.b64_json;
+    
+    if (!imageData) {
+      throw new Error('No image generated');
+    }
+
+    return {
+      imageBuffer: Buffer.from(imageData, 'base64'),
+      contentType: 'image/png',
+      revisedPrompt: data.data?.[0]?.revised_prompt,
+    };
+  }
+}
+```
+
+### generators/flux.ts (Optional - Replicate)
+
+```typescript
+import { ThumbnailGenerator, GenerationParams, GenerationResult } from './index';
+
+export class FluxGenerator implements ThumbnailGenerator {
+  name = 'flux';
+  private apiKey: string;
+
+  constructor(apiKey: string, options?: Record<string, unknown>) {
+    this.apiKey = apiKey;
+  }
+
+  async generate(params: GenerationParams): Promise<GenerationResult> {
+    const { prompt, width, height } = params;
+
+    // Start prediction
+    const createResponse = await fetch('https://api.replicate.com/v1/predictions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Token ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        version: 'black-forest-labs/flux-schnell',  // or flux-dev for higher quality
+        input: {
+          prompt,
+          width,
+          height,
+          num_outputs: 1,
+        },
+      }),
+    });
+
+    if (!createResponse.ok) {
+      throw new Error(`Flux prediction failed: ${createResponse.status}`);
+    }
+
+    const prediction = await createResponse.json();
+    
+    // Poll for completion
+    let result = prediction;
+    while (result.status !== 'succeeded' && result.status !== 'failed') {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const pollResponse = await fetch(result.urls.get, {
+        headers: { 'Authorization': `Token ${this.apiKey}` },
+      });
+      result = await pollResponse.json();
+    }
+
+    if (result.status === 'failed') {
+      throw new Error(`Flux generation failed: ${result.error}`);
+    }
+
+    // Download the image
+    const imageUrl = result.output?.[0];
+    if (!imageUrl) {
+      throw new Error('No image URL in response');
+    }
+
+    const imageResponse = await fetch(imageUrl);
+    const arrayBuffer = await imageResponse.arrayBuffer();
+
+    return {
+      imageBuffer: Buffer.from(arrayBuffer),
+      contentType: 'image/webp',
+    };
+  }
+}
+```
+
+---
+
+## Part 4: Thumbnail Node Implementation (index.ts)
+
+```typescript
+import { z } from 'zod';
+import {
+  NodeContract,
+  NodeMeta,
+  RunContext,
+  NodeResult,
+  ExecutionOptions,
+  ValidationResult,
+  CostEstimate,
+  ApiCallLog,
+} from '../base';
+import {
+  ThumbnailInputSchema,
+  ThumbnailOutputSchema,
+  ThumbnailConfigSchema,
+  ThumbnailInput,
+  ThumbnailOutput,
+  ThumbnailConfig,
+  ThumbnailOption,
+  ThumbnailStyleGuide,
+} from './types';
+import { buildThumbnailPrompt, extractOverlayText } from './prompt-builder';
+import { createGenerator, GeneratorType } from './generators';
+
+export class ThumbnailGeneratorNode implements NodeContract<
+  typeof ThumbnailInputSchema,
+  typeof ThumbnailOutputSchema,
+  typeof ThumbnailConfigSchema
+> {
+  meta: NodeMeta = {
+    id: 'thumbnail',
+    name: 'Thumbnail Generator',
+    description: 'Generates YouTube thumbnail options using AI image generation',
+    icon: 'Image',
+    category: 'production',
+    requiredCredentials: ['gemini'],  // or openai/replicate based on config
+    estimatedDuration: '30s - 2min',
+  };
+
+  inputSchema = ThumbnailInputSchema;
+  outputSchema = ThumbnailOutputSchema;
+  configSchema = ThumbnailConfigSchema;
+
+  // === Get Input from Context ===
+
+  getInputFromContext(context: RunContext): ThumbnailInput {
+    const script = context.previousOutputs.script;
+    const trigger = context.previousOutputs.trigger;
+    
+    if (!script) {
+      throw new Error('Script output not found');
+    }
+
+    return {
+      title: script.title,
+      topic: trigger?.topic ?? script.title,
+      keyPoints: script.sections.map(s => s.name),
+      overlayText: extractOverlayText(
+        script.title,
+        context.config.thumbnail?.styleGuide?.typography?.maxWords ?? 4
+      ),
+      count: context.config.thumbnail?.defaultCount ?? 3,
+      styleOverride: context.runOverrides.nodeOverrides?.thumbnail?.styleOverride,
+    };
+  }
+
+  // === Validation ===
+
+  validate(
+    input: ThumbnailInput,
+    config: ThumbnailConfig,
+    context: RunContext
+  ): ValidationResult {
+    const errors: { field: string; message: string }[] = [];
+    const warnings: { field: string; message: string }[] = [];
+
+    // Title required
+    if (!input.title || input.title.trim().length === 0) {
+      errors.push({
+        field: 'title',
+        message: 'Title is required for thumbnail generation',
+      });
+    }
+
+    // Overlay text length check
+    if (input.overlayText && input.overlayText.split(/\s+/).length > 6) {
+      warnings.push({
+        field: 'overlayText',
+        message: 'Overlay text is long - thumbnails work best with 3-4 words',
+      });
+    }
+
+    // Count validation
+    if (input.count > 5) {
+      warnings.push({
+        field: 'count',
+        message: 'Generating many thumbnails will increase cost and time',
+      });
+    }
+
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  // === Cost Estimation ===
+
+  estimateCost(input: ThumbnailInput, config: ThumbnailConfig): CostEstimate {
+    const count = input.count ?? config.defaultCount ?? 3;
+    
+    // Approximate costs per image
+    const costs: Record<GeneratorType, number> = {
+      gemini: 0.04,      // Imagen pricing
+      dalle: 0.08,       // DALL-E 3 HD
+      flux: 0.03,        // Replicate Flux
+    };
+
+    const costPerImage = costs[config.generator];
+    const total = count * costPerImage;
+
+    return {
+      estimated: true,
+      breakdown: [{
+        service: config.generator,
+        units: count,
+        unitType: 'images',
+        cost: total,
+      }],
+      total,
+      confidence: 'high',
+    };
+  }
+
+  // === Execution ===
+
+  async execute(
+    input: ThumbnailInput,
+    config: ThumbnailConfig,
+    context: RunContext,
+    options?: ExecutionOptions
+  ): Promise<NodeResult<ThumbnailOutput>> {
+    const startedAt = new Date();
+    const apiCalls: ApiCallLog[] = [];
+    const generatedOptions: ThumbnailOption[] = [];
+
+    try {
+      // Check cancellation
+      if (options?.signal?.aborted) {
+        return {
+          success: false,
+          error: { code: 'CANCELLED', message: 'Cancelled by user', retryable: false },
+        };
+      }
+
+      // Get API key based on generator type
+      const credentialType = this.getCredentialType(config.generator);
+      const apiKey = await context.services.credentials.get(credentialType);
+
+      // Create generator
+      const generator = createGenerator(config.generator, apiKey, {
+        model: config.generator === 'gemini' ? config.geminiModel : config.dalleModel,
+        quality: config.dalleQuality,
+      });
+
+      // Merge style guide with overrides
+      const styleGuide = this.mergeStyleGuide(config.styleGuide, input.styleOverride);
+      
+      const count = input.count ?? config.defaultCount;
+
+      options?.onProgress?.({
+        percent: 5,
+        message: `Generating ${count} thumbnail options...`,
+        stage: 'init',
+      });
+
+      // Generate each variation
+      for (let i = 0; i < count; i++) {
+        // Check cancellation
+        if (options?.signal?.aborted) {
+          return {
+            success: false,
+            error: { code: 'CANCELLED', message: 'Cancelled by user', retryable: false },
+            partialOutput: { options: generatedOptions, styleGuideUsed: styleGuide },
+          };
+        }
+
+        const progress = Math.round(((i + 1) / count) * 90) + 5;
+        options?.onProgress?.({
+          percent: progress,
+          message: `Generating option ${i + 1}/${count}...`,
+          stage: 'generation',
+        });
+
+        try {
+          // Build prompt for this variation
+          const prompt = buildThumbnailPrompt({
+            input,
+            styleGuide,
+            variationIndex: i,
+            includeText: config.addTextOverlay && config.textOverlayMethod === 'ai',
+          });
+
+          const requestedAt = new Date();
+          
+          const result = await this.generateWithRetry(
+            generator,
+            {
+              prompt,
+              width: styleGuide.dimensions.width,
+              height: styleGuide.dimensions.height,
+            },
+            config.maxRetries
+          );
+
+          const respondedAt = new Date();
+
+          apiCalls.push({
+            service: config.generator,
+            endpoint: '/generate',
+            method: 'POST',
+            requestedAt,
+            respondedAt,
+            durationMs: respondedAt.getTime() - requestedAt.getTime(),
+            status: 200,
+          });
+
+          // Upload to storage
+          const optionId = `option_${i + 1}`;
+          const storagePath = `runs/${context.runId}/thumbnails/${optionId}.png`;
+          
+          const imageUrl = await this.uploadImage(
+            context.services.storage,
+            storagePath,
+            result.imageBuffer,
+            result.contentType
+          );
+
+          generatedOptions.push({
+            id: optionId,
+            imageUrl,
+            imagePath: storagePath,
+            prompt: result.revisedPrompt ?? prompt,
+            metadata: {
+              generator: config.generator,
+              dimensions: styleGuide.dimensions,
+              hasTextOverlay: config.addTextOverlay && config.textOverlayMethod === 'ai',
+            },
+          });
+
+        } catch (genError) {
+          options?.onLog?.({
+            level: 'error',
+            message: `Failed to generate option ${i + 1}: ${genError}`,
+            timestamp: new Date(),
+            data: { variationIndex: i, error: String(genError) },
+          });
+
+          // Continue with other variations unless it's a fatal error
+          if (String(genError).includes('INVALID_API_KEY') || 
+              String(genError).includes('QUOTA')) {
+            throw genError;
+          }
+        }
+      }
+
+      // Check if we got any thumbnails
+      if (generatedOptions.length === 0) {
+        return {
+          success: false,
+          error: {
+            code: 'NO_THUMBNAILS',
+            message: 'Failed to generate any thumbnails',
+            retryable: true,
+          },
+        };
+      }
+
+      options?.onProgress?.({
+        percent: 100,
+        message: `Generated ${generatedOptions.length} thumbnail options`,
+        stage: 'done',
+      });
+
+      const completedAt = new Date();
+      const output: ThumbnailOutput = {
+        options: generatedOptions,
+        styleGuideUsed: styleGuide,
+      };
+
+      return {
+        success: true,
+        output,
+        metadata: {
+          startedAt,
+          completedAt,
+          durationMs: completedAt.getTime() - startedAt.getTime(),
+          actualCost: this.calculateActualCost(generatedOptions.length, config.generator),
+          apiCalls,
+        },
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        error: this.mapError(error),
+        partialOutput: generatedOptions.length > 0
+          ? { options: generatedOptions, styleGuideUsed: config.styleGuide }
+          : undefined,
+      };
+    }
+  }
+
+  // === Private Helpers ===
+
+  private getCredentialType(generator: GeneratorType): string {
+    switch (generator) {
+      case 'gemini': return 'gemini';
+      case 'dalle': return 'openai';
+      case 'flux': return 'replicate';
+    }
+  }
+
+  private mergeStyleGuide(
+    base: ThumbnailStyleGuide,
+    override?: Partial<ThumbnailStyleGuide>
+  ): ThumbnailStyleGuide {
+    if (!override) return base;
+
+    return {
+      dimensions: { ...base.dimensions, ...override.dimensions },
+      colors: { ...base.colors, ...override.colors },
+      typography: { ...base.typography, ...override.typography },
+      style: { ...base.style, ...override.style },
+      elements: { ...base.elements, ...override.elements },
+    };
+  }
+
+  private async generateWithRetry(
+    generator: ReturnType<typeof createGenerator>,
+    params: Parameters<ReturnType<typeof createGenerator>['generate']>[0],
+    maxRetries: number
+  ): Promise<Awaited<ReturnType<ReturnType<typeof createGenerator>['generate']>>> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await generator.generate(params);
+      } catch (error) {
+        lastError = error as Error;
+
+        // Don't retry non-retryable errors
+        if (
+          lastError.message.includes('INVALID_API_KEY') ||
+          lastError.message.includes('content_policy') ||
+          lastError.message.includes('safety')
+        ) {
+          throw lastError;
+        }
+
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
+  private async uploadImage(
+    storage: StorageClient,
+    path: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<string> {
+    const { data, error } = await storage.upload(path, buffer, {
+      contentType,
+      upsert: true,
+    });
+
+    if (error) {
+      throw new Error(`Failed to upload image: ${error.message}`);
+    }
+
+    const { data: urlData } = storage.getPublicUrl(path);
+    return urlData.publicUrl;
+  }
+
+  private calculateActualCost(count: number, generator: GeneratorType): CostEstimate {
+    const costs: Record<GeneratorType, number> = {
+      gemini: 0.04,
+      dalle: 0.08,
+      flux: 0.03,
+    };
+
+    const total = count * costs[generator];
+
+    return {
+      estimated: false,
+      breakdown: [{
+        service: generator,
+        units: count,
+        unitType: 'images',
+        cost: total,
+      }],
+      total,
+      confidence: 'high',
+    };
+  }
+
+  private mapError(error: unknown): { code: string; message: string; retryable: boolean } {
+    const message = String(error);
+
+    if (message.includes('INVALID_API_KEY') || message.includes('401')) {
+      return { code: 'INVALID_CREDENTIALS', message: 'Invalid API key', retryable: false };
+    }
+    if (message.includes('content_policy') || message.includes('safety')) {
+      return { code: 'CONTENT_POLICY', message: 'Content blocked by safety filter', retryable: false };
+    }
+    if (message.includes('rate') || message.includes('429')) {
+      return { code: 'RATE_LIMIT', message: 'Rate limit exceeded', retryable: true };
+    }
+    if (message.includes('quota')) {
+      return { code: 'QUOTA_EXCEEDED', message: 'API quota exceeded', retryable: false };
+    }
+
+    return { code: 'THUMBNAIL_ERROR', message: String(error), retryable: true };
+  }
+}
+```
+
+---
+
+## Part 5: Tests
+
+```typescript
+// src/lib/nodes/thumbnail/__tests__/thumbnail.test.ts
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ThumbnailGeneratorNode } from '../index';
+import { ThumbnailInputSchema, ThumbnailConfigSchema, ThumbnailStyleGuideSchema } from '../types';
+import { buildThumbnailPrompt, extractOverlayText } from '../prompt-builder';
+
+describe('ThumbnailGeneratorNode', () => {
+  const node = new ThumbnailGeneratorNode();
+
+  describe('meta', () => {
+    it('has correct id', () => {
+      expect(node.meta.id).toBe('thumbnail');
+    });
+
+    it('has correct category', () => {
+      expect(node.meta.category).toBe('production');
+    });
+  });
+
+  describe('input validation', () => {
+    it('accepts valid input', () => {
+      const input = {
+        title: 'How to Build a YouTube Automation Tool',
+        topic: 'YouTube automation',
+        count: 3,
+      };
+
+      const result = ThumbnailInputSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it('applies default count', () => {
+      const input = {
+        title: 'Test Title',
+        topic: 'Test topic',
+      };
+
+      const result = ThumbnailInputSchema.parse(input);
+      expect(result.count).toBe(3);
+    });
+
+    it('rejects count > 5', () => {
+      const input = {
+        title: 'Test',
+        topic: 'Test',
+        count: 10,
+      };
+
+      const result = ThumbnailInputSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('style guide', () => {
+    it('has correct default dimensions', () => {
+      const styleGuide = ThumbnailStyleGuideSchema.parse({});
+      expect(styleGuide.dimensions.width).toBe(1280);
+      expect(styleGuide.dimensions.height).toBe(720);
+    });
+
+    it('allows mood override', () => {
+      const styleGuide = ThumbnailStyleGuideSchema.parse({
+        style: { mood: 'dramatic' },
+      });
+      expect(styleGuide.style.mood).toBe('dramatic');
+    });
+  });
+});
+
+describe('buildThumbnailPrompt', () => {
+  const defaultStyleGuide = ThumbnailStyleGuideSchema.parse({});
+  
+  it('includes topic in prompt', () => {
+    const prompt = buildThumbnailPrompt({
+      input: { title: 'Test', topic: 'AI automation', count: 1 },
+      styleGuide: defaultStyleGuide,
+      variationIndex: 0,
+      includeText: false,
+    });
+
+    expect(prompt).toContain('AI automation');
+  });
+
+  it('includes mood description', () => {
+    const prompt = buildThumbnailPrompt({
+      input: { title: 'Test', topic: 'Test', count: 1 },
+      styleGuide: { ...defaultStyleGuide, style: { ...defaultStyleGuide.style, mood: 'dramatic' } },
+      variationIndex: 0,
+      includeText: false,
+    });
+
+    expect(prompt).toContain('dramatic');
+  });
+
+  it('includes text overlay when enabled', () => {
+    const prompt = buildThumbnailPrompt({
+      input: { title: 'Test', topic: 'Test', overlayText: 'AMAZING', count: 1 },
+      styleGuide: defaultStyleGuide,
+      variationIndex: 0,
+      includeText: true,
+    });
+
+    expect(prompt).toContain('AMAZING');
+  });
+
+  it('creates different variations', () => {
+    const baseParams = {
+      input: { title: 'Test', topic: 'Test', count: 3 },
+      styleGuide: defaultStyleGuide,
+      includeText: false,
+    };
+
+    const prompt0 = buildThumbnailPrompt({ ...baseParams, variationIndex: 0 });
+    const prompt1 = buildThumbnailPrompt({ ...baseParams, variationIndex: 1 });
+    const prompt2 = buildThumbnailPrompt({ ...baseParams, variationIndex: 2 });
+
+    // Prompts should differ in composition
+    expect(prompt0).not.toBe(prompt1);
+    expect(prompt1).not.toBe(prompt2);
+  });
+});
+
+describe('extractOverlayText', () => {
+  it('returns short titles unchanged', () => {
+    const result = extractOverlayText('AI Tools', 4);
+    expect(result).toBe('AI Tools');
+  });
+
+  it('truncates long titles', () => {
+    const result = extractOverlayText('The Ultimate Guide to Building YouTube Automation Tools', 4);
+    const words = result.split(' ');
+    expect(words.length).toBeLessThanOrEqual(4);
+  });
+
+  it('removes filler words', () => {
+    const result = extractOverlayText('The Best of the AI Tools', 4);
+    expect(result).not.toContain('The');
+    expect(result).not.toContain('of');
+    expect(result).not.toContain('the');
+  });
+});
+
+describe('cost estimation', () => {
+  const node = new ThumbnailGeneratorNode();
+
+  it('estimates cost based on count and generator', () => {
+    const input = { title: 'Test', topic: 'Test', count: 3 };
+    const config = ThumbnailConfigSchema.parse({ generator: 'dalle' });
+
+    const estimate = node.estimateCost(input, config);
+
+    expect(estimate.total).toBeCloseTo(0.24);  // 3 * $0.08
+    expect(estimate.breakdown[0].service).toBe('dalle');
+  });
+
+  it('gemini is cheaper than dalle', () => {
+    const input = { title: 'Test', topic: 'Test', count: 3 };
+    
+    const geminiCost = node.estimateCost(input, ThumbnailConfigSchema.parse({ generator: 'gemini' }));
+    const dalleCost = node.estimateCost(input, ThumbnailConfigSchema.parse({ generator: 'dalle' }));
+
+    expect(geminiCost.total).toBeLessThan(dalleCost.total);
+  });
+});
+
+describe('validation', () => {
+  const node = new ThumbnailGeneratorNode();
+  const mockContext = {
+    config: { thumbnail: { styleGuide: ThumbnailStyleGuideSchema.parse({}) } },
+  } as any;
+
+  it('requires title', () => {
+    const result = node.validate(
+      { title: '', topic: 'Test', count: 3 },
+      ThumbnailConfigSchema.parse({}),
+      mockContext
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.errors[0].field).toBe('title');
+  });
+
+  it('warns on long overlay text', () => {
+    const result = node.validate(
+      { title: 'Test', topic: 'Test', overlayText: 'This is a very long overlay text', count: 3 },
+      ThumbnailConfigSchema.parse({}),
+      mockContext
+    );
+
+    expect(result.valid).toBe(true);
+    expect(result.warnings.length).toBeGreaterThan(0);
+  });
+});
+```
+
+---
+
+## Part 6: Register Node
+
+Add to `src/lib/nodes/registry.ts`:
+
+```typescript
+import { ThumbnailGeneratorNode } from './thumbnail';
+
+// In initialization
+registry.register(new ThumbnailGeneratorNode());
+```
+
+---
+
+## Checklist
+
+- [ ] Create `src/lib/nodes/thumbnail/types.ts`
+- [ ] Create `src/lib/nodes/thumbnail/prompt-builder.ts`
+- [ ] Create `src/lib/nodes/thumbnail/generators/index.ts`
+- [ ] Create `src/lib/nodes/thumbnail/generators/gemini.ts`
+- [ ] Create `src/lib/nodes/thumbnail/generators/dalle.ts`
+- [ ] Create `src/lib/nodes/thumbnail/generators/flux.ts` (optional)
+- [ ] Create `src/lib/nodes/thumbnail/index.ts`
+- [ ] Create `src/lib/nodes/thumbnail/__tests__/thumbnail.test.ts`
+- [ ] Register node in registry
+- [ ] All tests passing
+
+---
+
+## Notes
+
+1. **Generator Choice**: Gemini Imagen is default (good quality, reasonable price). DALL-E 3 for best quality. Flux for fastest/cheapest.
+
+2. **Text Overlay**: Two approaches:
+   - `ai`: Include text in generation prompt (simpler but less control)
+   - `composite`: Generate image, then overlay text programmatically (more control, requires Sharp/Canvas)
+
+3. **Style Variations**: Each thumbnail uses different composition (centered, rule of thirds, close-up) to give users meaningful options.
+
+4. **Content Policy**: AI image generators have safety filters. Prompt may be rejected — handle gracefully.
+
+5. **Dimensions**: YouTube thumbnails are 1280x720. DALL-E 3 closest is 1792x1024 — may need resize.

@@ -1,0 +1,1945 @@
+# Assembly Node Implementation Instructions
+
+## Context
+
+VidFlow now has:
+- Trigger Node ✅
+- Script Node ✅
+- Voice Node ✅
+- Thumbnail Node ✅
+- 168 tests passing
+
+The Assembly Node is the most complex node. It combines all previous outputs into a final video.
+
+---
+
+## Overview
+
+The Assembly Node:
+1. Receives script, audio segments, and thumbnail from previous nodes
+2. Generates or sources visuals for each section (B-roll, images, text cards)
+3. Builds a video timeline with audio + visuals
+4. Adds captions/subtitles
+5. Applies intro/outro and background music
+6. Renders final video using FFmpeg
+7. Uploads to storage
+
+---
+
+## Architecture Decision: Server-Side FFmpeg
+
+Two approaches for video assembly:
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Server-side FFmpeg** | Full control, no browser limits, professional output | Requires server with FFmpeg, CPU/memory intensive |
+| **Client-side (Remotion/FFmpeg.wasm)** | No server needed, scales with users | Limited performance, browser memory limits |
+
+**Recommendation:** Server-side FFmpeg via a worker service or serverless function with extended timeout. For MVP, can run on same server with job queue.
+
+---
+
+## File Structure
+
+```
+src/lib/nodes/assembly/
+├── index.ts                    # AssemblyNode class
+├── types.ts                    # Zod schemas
+├── timeline/
+│   ├── index.ts                # Timeline builder
+│   ├── types.ts                # Timeline types
+│   └── segment.ts              # Segment utilities
+├── visuals/
+│   ├── index.ts                # Visual generator factory
+│   ├── stock.ts                # Stock footage (Pexels, Storyblocks)
+│   ├── ai-generated.ts         # AI-generated visuals
+│   └── text-cards.ts           # Text/quote cards
+├── captions/
+│   ├── index.ts                # Caption generator
+│   ├── srt.ts                  # SRT format
+│   └── styles.ts               # Caption styling
+├── ffmpeg/
+│   ├── index.ts                # FFmpeg wrapper
+│   ├── commands.ts             # Command builders
+│   └── progress.ts             # Progress parsing
+└── __tests__/
+    └── assembly.test.ts
+```
+
+---
+
+## Part 1: Assembly Types (types.ts)
+
+```typescript
+import { z } from 'zod';
+
+// === Visual Source Types ===
+
+export const VisualSourceSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('stock'),
+    provider: z.enum(['pexels', 'storyblocks', 'pixabay']),
+    query: z.string(),
+  }),
+  z.object({
+    type: z.literal('ai_generated'),
+    prompt: z.string(),
+    style: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('image'),
+    url: z.string(),
+    animation: z.enum(['none', 'ken_burns', 'zoom_in', 'zoom_out', 'pan']).default('ken_burns'),
+  }),
+  z.object({
+    type: z.literal('text_card'),
+    text: z.string(),
+    style: z.enum(['quote', 'title', 'bullet_points', 'statistic']),
+  }),
+  z.object({
+    type: z.literal('video'),
+    url: z.string(),
+    startTime: z.number().optional(),
+    endTime: z.number().optional(),
+  }),
+]);
+
+// === Timeline Segment ===
+
+export const TimelineSegmentSchema = z.object({
+  id: z.string(),
+  type: z.enum(['intro', 'content', 'outro']),
+  
+  // Timing
+  startTime: z.number(),           // Seconds from video start
+  duration: z.number(),            // Segment duration
+  
+  // Audio
+  audio: z.object({
+    url: z.string(),
+    volume: z.number().default(1.0),
+    fadeIn: z.number().default(0),
+    fadeOut: z.number().default(0),
+  }).optional(),
+  
+  // Visuals (can have multiple layers)
+  visuals: z.array(z.object({
+    source: VisualSourceSchema,
+    layer: z.number().default(0),   // Z-index
+    startOffset: z.number().default(0),
+    duration: z.number().optional(), // Defaults to segment duration
+    position: z.object({
+      x: z.number().default(0),
+      y: z.number().default(0),
+      width: z.number().default(100),  // Percentage
+      height: z.number().default(100),
+    }).optional(),
+  })),
+  
+  // Text overlay for this segment
+  caption: z.string().optional(),
+});
+
+// === Caption Style ===
+
+export const CaptionStyleSchema = z.object({
+  enabled: z.boolean().default(true),
+  font: z.string().default('Inter'),
+  fontSize: z.number().default(48),
+  fontColor: z.string().default('#FFFFFF'),
+  backgroundColor: z.string().default('#000000'),
+  backgroundOpacity: z.number().default(0.7),
+  position: z.enum(['bottom', 'top', 'center']).default('bottom'),
+  style: z.enum(['standard', 'highlighted', 'word_by_word', 'karaoke']).default('standard'),
+  maxWidth: z.number().default(80),  // Percentage of video width
+  marginBottom: z.number().default(50), // Pixels from bottom
+});
+
+// === Input Schema ===
+
+export const AssemblyInputSchema = z.object({
+  // From Script Node
+  script: z.object({
+    title: z.string(),
+    hook: z.object({
+      content: z.string(),
+      visualNotes: z.string(),
+      durationEstimate: z.number(),
+    }),
+    sections: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      content: z.string(),
+      visualNotes: z.string(),
+      bRollSuggestions: z.array(z.string()),
+      durationEstimate: z.number(),
+    })),
+    outro: z.object({
+      content: z.string(),
+      cta: z.string(),
+      visualNotes: z.string(),
+    }),
+  }),
+  
+  // From Voice Node
+  audioSegments: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    audioUrl: z.string(),
+    durationSeconds: z.number(),
+  })),
+  
+  // From Thumbnail Node (optional - for end screen)
+  thumbnail: z.object({
+    imageUrl: z.string(),
+  }).optional(),
+  
+  // Style overrides for this run
+  styleOverride: z.object({
+    captionStyle: CaptionStyleSchema.partial(),
+  }).optional(),
+});
+
+// === Output Schema ===
+
+export const AssemblyOutputSchema = z.object({
+  videoUrl: z.string(),
+  videoPath: z.string(),
+  
+  subtitleUrl: z.string().optional(),
+  subtitlePath: z.string().optional(),
+  
+  metadata: z.object({
+    duration: z.number(),
+    resolution: z.string(),
+    fileSize: z.number(),
+    format: z.string(),
+  }),
+  
+  timeline: z.array(TimelineSegmentSchema),
+});
+
+// === Config Schema ===
+
+export const AssemblyConfigSchema = z.object({
+  // Output settings
+  resolution: z.enum(['720p', '1080p', '4k']).default('1080p'),
+  aspectRatio: z.enum(['16:9', '9:16', '1:1']).default('16:9'),
+  frameRate: z.number().default(30),
+  format: z.enum(['mp4', 'webm', 'mov']).default('mp4'),
+  
+  // Quality
+  videoBitrate: z.string().default('8M'),
+  audioBitrate: z.string().default('192k'),
+  preset: z.enum(['ultrafast', 'fast', 'medium', 'slow']).default('medium'),
+  
+  // Assets
+  assets: z.object({
+    introVideo: z.string().optional(),
+    outroVideo: z.string().optional(),
+    backgroundMusic: z.string().optional(),
+    backgroundMusicVolume: z.number().default(0.15),
+    watermark: z.string().optional(),
+  }),
+  
+  // Captions
+  captionStyle: CaptionStyleSchema,
+  generateSubtitleFile: z.boolean().default(true),
+  
+  // Visual generation
+  visualSource: z.enum(['stock', 'ai_generated', 'text_cards', 'mixed']).default('mixed'),
+  stockProvider: z.enum(['pexels', 'storyblocks']).default('pexels'),
+  
+  // Transitions
+  transitionType: z.enum(['none', 'fade', 'crossfade', 'wipe']).default('crossfade'),
+  transitionDuration: z.number().default(0.5),
+  
+  // Text animation
+  textAnimation: z.enum(['none', 'fade', 'typewriter', 'slide']).default('fade'),
+});
+
+export type AssemblyInput = z.infer<typeof AssemblyInputSchema>;
+export type AssemblyOutput = z.infer<typeof AssemblyOutputSchema>;
+export type AssemblyConfig = z.infer<typeof AssemblyConfigSchema>;
+export type TimelineSegment = z.infer<typeof TimelineSegmentSchema>;
+export type CaptionStyle = z.infer<typeof CaptionStyleSchema>;
+export type VisualSource = z.infer<typeof VisualSourceSchema>;
+```
+
+---
+
+## Part 2: Timeline Builder (timeline/index.ts)
+
+```typescript
+import { 
+  AssemblyInput, 
+  AssemblyConfig, 
+  TimelineSegment,
+  VisualSource 
+} from '../types';
+
+export interface TimelineBuilderParams {
+  input: AssemblyInput;
+  config: AssemblyConfig;
+}
+
+export interface Timeline {
+  segments: TimelineSegment[];
+  totalDuration: number;
+}
+
+/**
+ * Build a video timeline from script and audio segments.
+ * Maps each script section to audio and generates visual sources.
+ */
+export async function buildTimeline(params: TimelineBuilderParams): Promise<Timeline> {
+  const { input, config } = params;
+  const segments: TimelineSegment[] = [];
+  let currentTime = 0;
+
+  // === Intro (if configured) ===
+  if (config.assets.introVideo) {
+    const introDuration = await getVideoDuration(config.assets.introVideo);
+    segments.push({
+      id: 'intro',
+      type: 'intro',
+      startTime: currentTime,
+      duration: introDuration,
+      visuals: [{
+        source: { type: 'video', url: config.assets.introVideo },
+        layer: 0,
+        startOffset: 0,
+      }],
+    });
+    currentTime += introDuration;
+  }
+
+  // === Hook ===
+  const hookAudio = input.audioSegments.find(s => s.id === 'hook');
+  if (hookAudio) {
+    segments.push({
+      id: 'hook',
+      type: 'content',
+      startTime: currentTime,
+      duration: hookAudio.durationSeconds,
+      audio: {
+        url: hookAudio.audioUrl,
+        volume: 1.0,
+        fadeIn: 0.3,
+        fadeOut: 0,
+      },
+      visuals: await generateVisuals(
+        input.script.hook.visualNotes,
+        input.script.hook.bRollSuggestions ?? [],
+        hookAudio.durationSeconds,
+        config
+      ),
+      caption: input.script.hook.content,
+    });
+    currentTime += hookAudio.durationSeconds;
+  }
+
+  // === Main Sections ===
+  for (const section of input.script.sections) {
+    const sectionAudio = input.audioSegments.find(s => s.id === section.id);
+    if (!sectionAudio) continue;
+
+    segments.push({
+      id: section.id,
+      type: 'content',
+      startTime: currentTime,
+      duration: sectionAudio.durationSeconds,
+      audio: {
+        url: sectionAudio.audioUrl,
+        volume: 1.0,
+        fadeIn: 0,
+        fadeOut: 0,
+      },
+      visuals: await generateVisuals(
+        section.visualNotes,
+        section.bRollSuggestions,
+        sectionAudio.durationSeconds,
+        config
+      ),
+      caption: section.content,
+    });
+    currentTime += sectionAudio.durationSeconds;
+  }
+
+  // === Outro ===
+  const outroAudio = input.audioSegments.find(s => s.id === 'outro');
+  if (outroAudio) {
+    const outroVisuals = await generateVisuals(
+      input.script.outro.visualNotes,
+      [],
+      outroAudio.durationSeconds,
+      config
+    );
+
+    // Add thumbnail as end screen if available
+    if (input.thumbnail) {
+      outroVisuals.push({
+        source: { 
+          type: 'image', 
+          url: input.thumbnail.imageUrl,
+          animation: 'zoom_in',
+        },
+        layer: 1,
+        startOffset: Math.max(0, outroAudio.durationSeconds - 5),
+        duration: 5,
+      });
+    }
+
+    segments.push({
+      id: 'outro',
+      type: 'content',
+      startTime: currentTime,
+      duration: outroAudio.durationSeconds,
+      audio: {
+        url: outroAudio.audioUrl,
+        volume: 1.0,
+        fadeIn: 0,
+        fadeOut: 0.5,
+      },
+      visuals: outroVisuals,
+      caption: input.script.outro.content,
+    });
+    currentTime += outroAudio.durationSeconds;
+  }
+
+  // === Outro Video (if configured) ===
+  if (config.assets.outroVideo) {
+    const outroDuration = await getVideoDuration(config.assets.outroVideo);
+    segments.push({
+      id: 'outro_video',
+      type: 'outro',
+      startTime: currentTime,
+      duration: outroDuration,
+      visuals: [{
+        source: { type: 'video', url: config.assets.outroVideo },
+        layer: 0,
+        startOffset: 0,
+      }],
+    });
+    currentTime += outroDuration;
+  }
+
+  return {
+    segments,
+    totalDuration: currentTime,
+  };
+}
+
+/**
+ * Generate visual sources for a segment based on visual notes and B-roll suggestions.
+ */
+async function generateVisuals(
+  visualNotes: string,
+  bRollSuggestions: string[],
+  duration: number,
+  config: AssemblyConfig
+): Promise<TimelineSegment['visuals']> {
+  const visuals: TimelineSegment['visuals'] = [];
+
+  // Determine how many visuals we need (roughly one every 5-10 seconds)
+  const visualCount = Math.max(1, Math.ceil(duration / 7));
+  const visualDuration = duration / visualCount;
+
+  for (let i = 0; i < visualCount; i++) {
+    const query = bRollSuggestions[i % bRollSuggestions.length] || visualNotes;
+    
+    let source: VisualSource;
+    
+    switch (config.visualSource) {
+      case 'stock':
+        source = {
+          type: 'stock',
+          provider: config.stockProvider,
+          query,
+        };
+        break;
+      
+      case 'ai_generated':
+        source = {
+          type: 'ai_generated',
+          prompt: `${query}, cinematic, high quality, ${config.aspectRatio === '16:9' ? 'landscape' : 'portrait'}`,
+        };
+        break;
+      
+      case 'text_cards':
+        source = {
+          type: 'text_card',
+          text: query,
+          style: 'quote',
+        };
+        break;
+      
+      case 'mixed':
+      default:
+        // Alternate between stock and text cards
+        if (i % 3 === 0) {
+          source = {
+            type: 'text_card',
+            text: bRollSuggestions[i] || query.slice(0, 100),
+            style: 'quote',
+          };
+        } else {
+          source = {
+            type: 'stock',
+            provider: config.stockProvider,
+            query,
+          };
+        }
+        break;
+    }
+
+    visuals.push({
+      source,
+      layer: 0,
+      startOffset: i * visualDuration,
+      duration: visualDuration,
+    });
+  }
+
+  return visuals;
+}
+
+/**
+ * Get video duration using FFprobe
+ */
+async function getVideoDuration(url: string): Promise<number> {
+  // Implementation uses FFprobe to get duration
+  // For now, return a placeholder
+  return 5;
+}
+```
+
+---
+
+## Part 3: Visual Generators
+
+### visuals/stock.ts (Pexels)
+
+```typescript
+export interface StockVideo {
+  id: string;
+  url: string;
+  duration: number;
+  width: number;
+  height: number;
+  thumbnail: string;
+}
+
+export class PexelsClient {
+  private apiKey: string;
+  private baseUrl = 'https://api.pexels.com';
+
+  constructor(apiKey: string) {
+    this.apiKey = apiKey;
+  }
+
+  async searchVideos(query: string, options?: {
+    orientation?: 'landscape' | 'portrait' | 'square';
+    size?: 'large' | 'medium' | 'small';
+    perPage?: number;
+  }): Promise<StockVideo[]> {
+    const params = new URLSearchParams({
+      query,
+      orientation: options?.orientation ?? 'landscape',
+      size: options?.size ?? 'medium',
+      per_page: String(options?.perPage ?? 5),
+    });
+
+    const response = await fetch(`${this.baseUrl}/videos/search?${params}`, {
+      headers: {
+        'Authorization': this.apiKey,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Pexels search failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    return data.videos.map((v: any) => ({
+      id: v.id,
+      url: v.video_files.find((f: any) => f.quality === 'hd')?.link ?? v.video_files[0]?.link,
+      duration: v.duration,
+      width: v.width,
+      height: v.height,
+      thumbnail: v.image,
+    }));
+  }
+
+  async searchImages(query: string, perPage: number = 5): Promise<{
+    id: string;
+    url: string;
+    width: number;
+    height: number;
+  }[]> {
+    const response = await fetch(
+      `${this.baseUrl}/v1/search?query=${encodeURIComponent(query)}&per_page=${perPage}`,
+      {
+        headers: {
+          'Authorization': this.apiKey,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Pexels image search failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    return data.photos.map((p: any) => ({
+      id: p.id,
+      url: p.src.large2x,
+      width: p.width,
+      height: p.height,
+    }));
+  }
+
+  async downloadVideo(url: string): Promise<Buffer> {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to download video: ${response.status}`);
+    }
+    return Buffer.from(await response.arrayBuffer());
+  }
+}
+```
+
+### visuals/text-cards.ts
+
+```typescript
+import sharp from 'sharp';
+
+export interface TextCardOptions {
+  text: string;
+  style: 'quote' | 'title' | 'bullet_points' | 'statistic';
+  width: number;
+  height: number;
+  backgroundColor: string;
+  textColor: string;
+  fontFamily: string;
+  accentColor?: string;
+}
+
+/**
+ * Generate a text card image using Sharp
+ */
+export async function generateTextCard(options: TextCardOptions): Promise<Buffer> {
+  const { text, style, width, height, backgroundColor, textColor, fontFamily } = options;
+
+  // Create SVG text card
+  const svg = buildTextCardSvg(options);
+
+  // Render with Sharp
+  const image = await sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: backgroundColor,
+    },
+  })
+    .composite([{
+      input: Buffer.from(svg),
+      top: 0,
+      left: 0,
+    }])
+    .png()
+    .toBuffer();
+
+  return image;
+}
+
+function buildTextCardSvg(options: TextCardOptions): string {
+  const { text, style, width, height, textColor, fontFamily, accentColor } = options;
+
+  // Calculate font size based on text length
+  const maxChars = 100;
+  const baseFontSize = 64;
+  const fontSize = Math.max(32, baseFontSize * Math.min(1, maxChars / text.length));
+
+  let svgContent = '';
+
+  switch (style) {
+    case 'quote':
+      svgContent = `
+        <text x="50%" y="45%" text-anchor="middle" font-size="${fontSize}" fill="${textColor}" font-family="${fontFamily}">
+          "${wrapText(text, 30)}"
+        </text>
+        <text x="50%" y="90%" text-anchor="middle" font-size="${fontSize * 0.5}" fill="${accentColor ?? textColor}" font-family="${fontFamily}">
+          —
+        </text>
+      `;
+      break;
+
+    case 'title':
+      svgContent = `
+        <text x="50%" y="50%" text-anchor="middle" font-size="${fontSize * 1.2}" font-weight="bold" fill="${textColor}" font-family="${fontFamily}">
+          ${wrapText(text, 25)}
+        </text>
+      `;
+      break;
+
+    case 'statistic':
+      const [number, label] = text.split(':').map(s => s.trim());
+      svgContent = `
+        <text x="50%" y="40%" text-anchor="middle" font-size="${fontSize * 2}" font-weight="bold" fill="${accentColor ?? textColor}" font-family="${fontFamily}">
+          ${number}
+        </text>
+        <text x="50%" y="60%" text-anchor="middle" font-size="${fontSize * 0.6}" fill="${textColor}" font-family="${fontFamily}">
+          ${label}
+        </text>
+      `;
+      break;
+
+    case 'bullet_points':
+      const points = text.split('\n').filter(Boolean);
+      const lineHeight = fontSize * 1.5;
+      const startY = (height - (points.length * lineHeight)) / 2;
+      svgContent = points.map((point, i) => `
+        <text x="15%" y="${startY + (i * lineHeight)}" font-size="${fontSize * 0.6}" fill="${textColor}" font-family="${fontFamily}">
+          • ${point}
+        </text>
+      `).join('');
+      break;
+  }
+
+  return `
+    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+      ${svgContent}
+    </svg>
+  `;
+}
+
+function wrapText(text: string, maxCharsPerLine: number): string {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    if ((currentLine + ' ' + word).length > maxCharsPerLine) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = currentLine ? `${currentLine} ${word}` : word;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+
+  return lines.map((line, i) => 
+    `<tspan x="50%" dy="${i === 0 ? 0 : '1.2em'}">${line}</tspan>`
+  ).join('');
+}
+```
+
+---
+
+## Part 4: Caption Generator (captions/index.ts)
+
+```typescript
+import { CaptionStyle, TimelineSegment } from '../types';
+
+export interface Caption {
+  index: number;
+  startTime: number;
+  endTime: number;
+  text: string;
+}
+
+/**
+ * Generate captions from timeline segments.
+ * Splits long captions into readable chunks.
+ */
+export function generateCaptions(
+  segments: TimelineSegment[],
+  options?: { maxCharsPerCaption?: number; maxDurationPerCaption?: number }
+): Caption[] {
+  const maxChars = options?.maxCharsPerCaption ?? 80;
+  const maxDuration = options?.maxDurationPerCaption ?? 4;
+  
+  const captions: Caption[] = [];
+  let index = 1;
+
+  for (const segment of segments) {
+    if (!segment.caption) continue;
+
+    const words = segment.caption.split(/\s+/);
+    const wordsPerSecond = words.length / segment.duration;
+    
+    let currentCaption = '';
+    let captionStart = segment.startTime;
+    let wordIndex = 0;
+
+    for (const word of words) {
+      const wouldExceedLength = (currentCaption + ' ' + word).length > maxChars;
+      const wouldExceedDuration = (wordIndex / wordsPerSecond) > maxDuration;
+
+      if (currentCaption && (wouldExceedLength || wouldExceedDuration)) {
+        // Save current caption
+        const duration = wordIndex / wordsPerSecond;
+        captions.push({
+          index: index++,
+          startTime: captionStart,
+          endTime: captionStart + duration,
+          text: currentCaption.trim(),
+        });
+        
+        captionStart += duration;
+        currentCaption = word;
+        wordIndex = 1;
+      } else {
+        currentCaption = currentCaption ? `${currentCaption} ${word}` : word;
+        wordIndex++;
+      }
+    }
+
+    // Add remaining caption
+    if (currentCaption) {
+      captions.push({
+        index: index++,
+        startTime: captionStart,
+        endTime: segment.startTime + segment.duration,
+        text: currentCaption.trim(),
+      });
+    }
+  }
+
+  return captions;
+}
+
+/**
+ * Format time for SRT (00:00:00,000)
+ */
+export function formatSrtTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds % 1) * 1000);
+
+  return `${pad(hours)}:${pad(minutes)}:${pad(secs)},${pad(ms, 3)}`;
+}
+
+function pad(n: number, width: number = 2): string {
+  return n.toString().padStart(width, '0');
+}
+
+/**
+ * Generate SRT subtitle file content
+ */
+export function generateSrt(captions: Caption[]): string {
+  return captions.map(caption => 
+    `${caption.index}\n${formatSrtTime(caption.startTime)} --> ${formatSrtTime(caption.endTime)}\n${caption.text}\n`
+  ).join('\n');
+}
+
+/**
+ * Generate VTT subtitle file content
+ */
+export function generateVtt(captions: Caption[]): string {
+  const formatVttTime = (s: number) => formatSrtTime(s).replace(',', '.');
+  
+  const lines = ['WEBVTT', ''];
+  
+  for (const caption of captions) {
+    lines.push(`${formatVttTime(caption.startTime)} --> ${formatVttTime(caption.endTime)}`);
+    lines.push(caption.text);
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+```
+
+---
+
+## Part 5: FFmpeg Wrapper (ffmpeg/index.ts)
+
+```typescript
+import { spawn, ChildProcess } from 'child_process';
+import { EventEmitter } from 'events';
+import { TimelineSegment, AssemblyConfig } from '../types';
+
+export interface RenderOptions {
+  timeline: TimelineSegment[];
+  config: AssemblyConfig;
+  outputPath: string;
+  workDir: string;
+  onProgress?: (percent: number, message: string) => void;
+}
+
+export interface RenderResult {
+  outputPath: string;
+  duration: number;
+  fileSize: number;
+}
+
+/**
+ * Render video using FFmpeg
+ */
+export async function renderVideo(options: RenderOptions): Promise<RenderResult> {
+  const { timeline, config, outputPath, workDir, onProgress } = options;
+
+  // Step 1: Download/prepare all assets
+  onProgress?.(5, 'Preparing assets...');
+  const preparedAssets = await prepareAssets(timeline, workDir, onProgress);
+
+  // Step 2: Build FFmpeg filter complex
+  onProgress?.(20, 'Building video filter...');
+  const filterComplex = buildFilterComplex(timeline, preparedAssets, config);
+
+  // Step 3: Build FFmpeg command
+  const command = buildFfmpegCommand({
+    inputs: preparedAssets.map(a => a.localPath),
+    filterComplex,
+    config,
+    outputPath,
+  });
+
+  // Step 4: Execute FFmpeg
+  onProgress?.(30, 'Rendering video...');
+  await executeFfmpeg(command, (progress) => {
+    // FFmpeg progress is 30-95%
+    const mappedProgress = 30 + (progress * 0.65);
+    onProgress?.(mappedProgress, `Rendering: ${Math.round(progress)}%`);
+  });
+
+  // Step 5: Get output info
+  onProgress?.(95, 'Finalizing...');
+  const fileStats = await getFileStats(outputPath);
+
+  return {
+    outputPath,
+    duration: fileStats.duration,
+    fileSize: fileStats.size,
+  };
+}
+
+interface PreparedAsset {
+  segmentId: string;
+  visualIndex: number;
+  type: 'video' | 'image' | 'audio';
+  localPath: string;
+  duration?: number;
+}
+
+async function prepareAssets(
+  timeline: TimelineSegment[],
+  workDir: string,
+  onProgress?: (percent: number, message: string) => void
+): Promise<PreparedAsset[]> {
+  const assets: PreparedAsset[] = [];
+  let assetIndex = 0;
+  const totalAssets = timeline.reduce((sum, seg) => 
+    sum + seg.visuals.length + (seg.audio ? 1 : 0), 0
+  );
+
+  for (const segment of timeline) {
+    // Download audio
+    if (segment.audio) {
+      const audioPath = `${workDir}/audio_${segment.id}.mp3`;
+      await downloadFile(segment.audio.url, audioPath);
+      assets.push({
+        segmentId: segment.id,
+        visualIndex: -1,
+        type: 'audio',
+        localPath: audioPath,
+      });
+      assetIndex++;
+      onProgress?.(5 + (assetIndex / totalAssets) * 15, `Downloading audio ${segment.id}...`);
+    }
+
+    // Download/generate visuals
+    for (let i = 0; i < segment.visuals.length; i++) {
+      const visual = segment.visuals[i];
+      const visualPath = `${workDir}/visual_${segment.id}_${i}`;
+
+      switch (visual.source.type) {
+        case 'video':
+          await downloadFile(visual.source.url, `${visualPath}.mp4`);
+          assets.push({
+            segmentId: segment.id,
+            visualIndex: i,
+            type: 'video',
+            localPath: `${visualPath}.mp4`,
+            duration: visual.duration,
+          });
+          break;
+
+        case 'image':
+          await downloadFile(visual.source.url, `${visualPath}.jpg`);
+          assets.push({
+            segmentId: segment.id,
+            visualIndex: i,
+            type: 'image',
+            localPath: `${visualPath}.jpg`,
+            duration: visual.duration,
+          });
+          break;
+
+        case 'stock':
+          // Fetch from stock provider
+          const stockVideo = await fetchStockVideo(
+            visual.source.provider,
+            visual.source.query
+          );
+          await downloadFile(stockVideo.url, `${visualPath}.mp4`);
+          assets.push({
+            segmentId: segment.id,
+            visualIndex: i,
+            type: 'video',
+            localPath: `${visualPath}.mp4`,
+            duration: visual.duration,
+          });
+          break;
+
+        case 'text_card':
+          // Generate text card image
+          const cardBuffer = await generateTextCard({
+            text: visual.source.text,
+            style: visual.source.style,
+            width: 1920,
+            height: 1080,
+            backgroundColor: '#1a1a1a',
+            textColor: '#ffffff',
+            fontFamily: 'Inter',
+          });
+          await writeFile(`${visualPath}.png`, cardBuffer);
+          assets.push({
+            segmentId: segment.id,
+            visualIndex: i,
+            type: 'image',
+            localPath: `${visualPath}.png`,
+            duration: visual.duration,
+          });
+          break;
+
+        case 'ai_generated':
+          // Generate with AI (use thumbnail generator pattern)
+          const aiImage = await generateAiImage(visual.source.prompt);
+          await writeFile(`${visualPath}.png`, aiImage);
+          assets.push({
+            segmentId: segment.id,
+            visualIndex: i,
+            type: 'image',
+            localPath: `${visualPath}.png`,
+            duration: visual.duration,
+          });
+          break;
+      }
+
+      assetIndex++;
+      onProgress?.(5 + (assetIndex / totalAssets) * 15, `Preparing visual ${i + 1}...`);
+    }
+  }
+
+  return assets;
+}
+
+function buildFilterComplex(
+  timeline: TimelineSegment[],
+  assets: PreparedAsset[],
+  config: AssemblyConfig
+): string {
+  const filters: string[] = [];
+  const resolution = getResolution(config.resolution);
+  
+  // This is a simplified version - real implementation would be more complex
+  // handling multiple layers, transitions, ken burns, etc.
+
+  let videoStreams: string[] = [];
+  let audioStreams: string[] = [];
+  let inputIndex = 0;
+
+  for (const segment of timeline) {
+    const segmentAssets = assets.filter(a => a.segmentId === segment.id);
+    
+    // Handle visuals
+    for (const visual of segmentAssets.filter(a => a.type !== 'audio')) {
+      const inputLabel = `[${inputIndex}:v]`;
+      const outputLabel = `[v${inputIndex}]`;
+
+      if (visual.type === 'image') {
+        // Scale and loop image for duration
+        filters.push(
+          `${inputLabel}loop=loop=-1:size=1:start=0,setpts=N/FRAME_RATE/TB,` +
+          `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,` +
+          `pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2,` +
+          `trim=duration=${visual.duration}${outputLabel}`
+        );
+      } else {
+        // Scale video
+        filters.push(
+          `${inputLabel}scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,` +
+          `pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2,` +
+          `trim=duration=${visual.duration}${outputLabel}`
+        );
+      }
+
+      videoStreams.push(outputLabel);
+      inputIndex++;
+    }
+
+    // Handle audio
+    const audioAsset = segmentAssets.find(a => a.type === 'audio');
+    if (audioAsset) {
+      const inputLabel = `[${inputIndex}:a]`;
+      const outputLabel = `[a${inputIndex}]`;
+      
+      // Apply volume and fades
+      const fadeIn = segment.audio?.fadeIn ?? 0;
+      const fadeOut = segment.audio?.fadeOut ?? 0;
+      const volume = segment.audio?.volume ?? 1.0;
+      
+      filters.push(
+        `${inputLabel}volume=${volume},` +
+        `afade=t=in:st=0:d=${fadeIn},` +
+        `afade=t=out:st=${segment.duration - fadeOut}:d=${fadeOut}${outputLabel}`
+      );
+
+      audioStreams.push(outputLabel);
+      inputIndex++;
+    }
+  }
+
+  // Concatenate all streams
+  if (videoStreams.length > 0) {
+    filters.push(
+      `${videoStreams.join('')}concat=n=${videoStreams.length}:v=1:a=0[outv]`
+    );
+  }
+
+  if (audioStreams.length > 0) {
+    filters.push(
+      `${audioStreams.join('')}concat=n=${audioStreams.length}:v=0:a=1[outa]`
+    );
+  }
+
+  // Add background music if configured
+  if (config.assets.backgroundMusic) {
+    filters.push(
+      `[outa][${inputIndex}:a]amix=inputs=2:duration=first:dropout_transition=2,` +
+      `volume=${config.assets.backgroundMusicVolume}[outa_music]`
+    );
+  }
+
+  return filters.join(';');
+}
+
+interface FfmpegCommandOptions {
+  inputs: string[];
+  filterComplex: string;
+  config: AssemblyConfig;
+  outputPath: string;
+}
+
+function buildFfmpegCommand(options: FfmpegCommandOptions): string[] {
+  const { inputs, filterComplex, config, outputPath } = options;
+  const resolution = getResolution(config.resolution);
+
+  const args: string[] = ['-y'];  // Overwrite output
+
+  // Add inputs
+  for (const input of inputs) {
+    args.push('-i', input);
+  }
+
+  // Add background music if configured
+  if (config.assets.backgroundMusic) {
+    args.push('-i', config.assets.backgroundMusic);
+  }
+
+  // Filter complex
+  args.push('-filter_complex', filterComplex);
+
+  // Map outputs
+  args.push('-map', '[outv]');
+  args.push('-map', config.assets.backgroundMusic ? '[outa_music]' : '[outa]');
+
+  // Video codec
+  args.push('-c:v', 'libx264');
+  args.push('-preset', config.preset);
+  args.push('-b:v', config.videoBitrate);
+  args.push('-pix_fmt', 'yuv420p');
+
+  // Audio codec
+  args.push('-c:a', 'aac');
+  args.push('-b:a', config.audioBitrate);
+
+  // Frame rate
+  args.push('-r', String(config.frameRate));
+
+  // Output
+  args.push(outputPath);
+
+  return args;
+}
+
+function executeFfmpeg(
+  args: string[],
+  onProgress?: (percent: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const process = spawn('ffmpeg', args);
+
+    let duration = 0;
+
+    process.stderr.on('data', (data: Buffer) => {
+      const line = data.toString();
+
+      // Parse duration
+      const durationMatch = line.match(/Duration: (\d{2}):(\d{2}):(\d{2})/);
+      if (durationMatch) {
+        const [, hours, minutes, seconds] = durationMatch;
+        duration = parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseInt(seconds);
+      }
+
+      // Parse progress
+      const timeMatch = line.match(/time=(\d{2}):(\d{2}):(\d{2})/);
+      if (timeMatch && duration > 0) {
+        const [, hours, minutes, seconds] = timeMatch;
+        const currentTime = parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseInt(seconds);
+        const percent = (currentTime / duration) * 100;
+        onProgress?.(Math.min(percent, 100));
+      }
+    });
+
+    process.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`FFmpeg exited with code ${code}`));
+      }
+    });
+
+    process.on('error', reject);
+  });
+}
+
+function getResolution(preset: '720p' | '1080p' | '4k'): { width: number; height: number } {
+  switch (preset) {
+    case '720p': return { width: 1280, height: 720 };
+    case '1080p': return { width: 1920, height: 1080 };
+    case '4k': return { width: 3840, height: 2160 };
+  }
+}
+
+// Placeholder implementations
+async function downloadFile(url: string, path: string): Promise<void> {
+  const response = await fetch(url);
+  const buffer = await response.arrayBuffer();
+  await writeFile(path, Buffer.from(buffer));
+}
+
+async function writeFile(path: string, data: Buffer): Promise<void> {
+  const fs = await import('fs/promises');
+  await fs.writeFile(path, data);
+}
+
+async function getFileStats(path: string): Promise<{ duration: number; size: number }> {
+  const fs = await import('fs/promises');
+  const stats = await fs.stat(path);
+  // Duration would be extracted with ffprobe
+  return { duration: 0, size: stats.size };
+}
+
+async function fetchStockVideo(provider: string, query: string): Promise<{ url: string }> {
+  // Implementation would use PexelsClient or similar
+  throw new Error('Not implemented');
+}
+
+async function generateAiImage(prompt: string): Promise<Buffer> {
+  // Implementation would use thumbnail generators
+  throw new Error('Not implemented');
+}
+
+import { generateTextCard } from '../visuals/text-cards';
+```
+
+---
+
+## Part 6: Assembly Node Implementation (index.ts)
+
+```typescript
+import { z } from 'zod';
+import {
+  NodeContract,
+  NodeMeta,
+  RunContext,
+  NodeResult,
+  ExecutionOptions,
+  ValidationResult,
+  CostEstimate,
+  ApiCallLog,
+} from '../base';
+import {
+  AssemblyInputSchema,
+  AssemblyOutputSchema,
+  AssemblyConfigSchema,
+  AssemblyInput,
+  AssemblyOutput,
+  AssemblyConfig,
+} from './types';
+import { buildTimeline } from './timeline';
+import { generateCaptions, generateSrt, generateVtt } from './captions';
+import { renderVideo } from './ffmpeg';
+import { mkdir, rm } from 'fs/promises';
+import { randomUUID } from 'crypto';
+import { join } from 'path';
+
+export class AssemblyNode implements NodeContract<
+  typeof AssemblyInputSchema,
+  typeof AssemblyOutputSchema,
+  typeof AssemblyConfigSchema
+> {
+  meta: NodeMeta = {
+    id: 'assembly',
+    name: 'Video Assembly',
+    description: 'Combines audio, visuals, and captions into final video',
+    icon: 'Film',
+    category: 'production',
+    requiredCredentials: ['pexels'],  // For stock footage
+    estimatedDuration: '5-15min',
+  };
+
+  inputSchema = AssemblyInputSchema;
+  outputSchema = AssemblyOutputSchema;
+  configSchema = AssemblyConfigSchema;
+
+  // === Get Input from Context ===
+
+  getInputFromContext(context: RunContext): AssemblyInput {
+    const script = context.previousOutputs.script;
+    const voice = context.previousOutputs.voice;
+    const thumbnail = context.previousOutputs.thumbnail;
+
+    if (!script) throw new Error('Script output not found');
+    if (!voice) throw new Error('Voice output not found');
+
+    return {
+      script: {
+        title: script.title,
+        hook: script.hook,
+        sections: script.sections,
+        outro: script.outro,
+      },
+      audioSegments: voice.segments,
+      thumbnail: thumbnail?.options?.[0] 
+        ? { imageUrl: thumbnail.options[0].imageUrl }
+        : undefined,
+      styleOverride: context.runOverrides.nodeOverrides?.assembly?.styleOverride,
+    };
+  }
+
+  // === Validation ===
+
+  validate(
+    input: AssemblyInput,
+    config: AssemblyConfig,
+    context: RunContext
+  ): ValidationResult {
+    const errors: { field: string; message: string }[] = [];
+    const warnings: { field: string; message: string }[] = [];
+
+    // Check audio segments exist
+    if (!input.audioSegments || input.audioSegments.length === 0) {
+      errors.push({
+        field: 'audioSegments',
+        message: 'No audio segments provided',
+      });
+    }
+
+    // Check script sections match audio
+    const audioIds = new Set(input.audioSegments.map(a => a.id));
+    for (const section of input.script.sections) {
+      if (!audioIds.has(section.id)) {
+        warnings.push({
+          field: 'audioSegments',
+          message: `No audio for section: ${section.name}`,
+        });
+      }
+    }
+
+    // Check assets exist if configured
+    if (config.assets.introVideo && !config.assets.introVideo.startsWith('http')) {
+      warnings.push({
+        field: 'config.assets.introVideo',
+        message: 'Intro video URL may be invalid',
+      });
+    }
+
+    // Estimate render time warning
+    const totalDuration = input.audioSegments.reduce((sum, s) => sum + s.durationSeconds, 0);
+    if (totalDuration > 1800) {  // 30 minutes
+      warnings.push({
+        field: 'duration',
+        message: `Long video (${Math.round(totalDuration / 60)} min) - rendering may take a while`,
+      });
+    }
+
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  // === Cost Estimation ===
+
+  estimateCost(input: AssemblyInput, config: AssemblyConfig): CostEstimate {
+    const totalDuration = input.audioSegments.reduce((sum, s) => sum + s.durationSeconds, 0);
+    
+    // Estimate based on visual source
+    let visualCost = 0;
+    const visualCount = Math.ceil(totalDuration / 7);  // One visual every 7 seconds
+
+    switch (config.visualSource) {
+      case 'stock':
+        // Pexels is free, Storyblocks would have a cost
+        visualCost = config.stockProvider === 'storyblocks' ? visualCount * 0.10 : 0;
+        break;
+      case 'ai_generated':
+        visualCost = visualCount * 0.04;  // ~$0.04 per image
+        break;
+      case 'text_cards':
+        visualCost = 0;  // Generated locally
+        break;
+      case 'mixed':
+        visualCost = (visualCount / 2) * 0.04;  // Half AI, half text
+        break;
+    }
+
+    // Compute cost (if using cloud rendering)
+    const computeCost = 0;  // Self-hosted for now
+
+    return {
+      estimated: true,
+      breakdown: [
+        { service: 'visuals', units: visualCount, unitType: 'images', cost: visualCost },
+        { service: 'compute', units: Math.ceil(totalDuration / 60), unitType: 'minutes', cost: computeCost },
+      ],
+      total: visualCost + computeCost,
+      confidence: 'medium',
+    };
+  }
+
+  // === Execution ===
+
+  async execute(
+    input: AssemblyInput,
+    config: AssemblyConfig,
+    context: RunContext,
+    options?: ExecutionOptions
+  ): Promise<NodeResult<AssemblyOutput>> {
+    const startedAt = new Date();
+    const apiCalls: ApiCallLog[] = [];
+    
+    // Create temporary work directory
+    const workDir = join('/tmp', 'vidflow', context.runId, randomUUID());
+    await mkdir(workDir, { recursive: true });
+
+    try {
+      // Check cancellation
+      if (options?.signal?.aborted) {
+        return {
+          success: false,
+          error: { code: 'CANCELLED', message: 'Cancelled by user', retryable: false },
+        };
+      }
+
+      options?.onProgress?.({
+        percent: 5,
+        message: 'Building timeline...',
+        stage: 'timeline',
+      });
+
+      // === Build Timeline ===
+      const timeline = await buildTimeline({
+        input,
+        config,
+      });
+
+      options?.onLog?.({
+        level: 'info',
+        message: `Timeline built: ${timeline.segments.length} segments, ${timeline.totalDuration}s total`,
+        timestamp: new Date(),
+      });
+
+      // Check cancellation
+      if (options?.signal?.aborted) {
+        await this.cleanup(workDir);
+        return {
+          success: false,
+          error: { code: 'CANCELLED', message: 'Cancelled by user', retryable: false },
+        };
+      }
+
+      // === Generate Captions ===
+      options?.onProgress?.({
+        percent: 10,
+        message: 'Generating captions...',
+        stage: 'captions',
+      });
+
+      const captions = generateCaptions(timeline.segments);
+      const srtContent = generateSrt(captions);
+
+      // Save SRT file
+      const srtPath = join(workDir, 'subtitles.srt');
+      await writeFile(srtPath, srtContent);
+
+      // === Render Video ===
+      const outputFileName = `${input.script.title.replace(/[^a-z0-9]/gi, '_')}.mp4`;
+      const localOutputPath = join(workDir, outputFileName);
+
+      const renderResult = await renderVideo({
+        timeline: timeline.segments,
+        config,
+        outputPath: localOutputPath,
+        workDir,
+        onProgress: (percent, message) => {
+          options?.onProgress?.({
+            percent: 15 + (percent * 0.75),  // 15-90%
+            message,
+            stage: 'render',
+          });
+        },
+      });
+
+      // Check cancellation
+      if (options?.signal?.aborted) {
+        await this.cleanup(workDir);
+        return {
+          success: false,
+          error: { code: 'CANCELLED', message: 'Cancelled by user', retryable: false },
+        };
+      }
+
+      // === Upload to Storage ===
+      options?.onProgress?.({
+        percent: 92,
+        message: 'Uploading video...',
+        stage: 'upload',
+      });
+
+      const videoStoragePath = `runs/${context.runId}/video/${outputFileName}`;
+      const videoUrl = await this.uploadFile(
+        context.services.storage,
+        videoStoragePath,
+        localOutputPath
+      );
+
+      let subtitleUrl: string | undefined;
+      let subtitlePath: string | undefined;
+
+      if (config.generateSubtitleFile) {
+        subtitlePath = `runs/${context.runId}/video/subtitles.srt`;
+        subtitleUrl = await this.uploadFile(
+          context.services.storage,
+          subtitlePath,
+          srtPath
+        );
+      }
+
+      // === Cleanup ===
+      options?.onProgress?.({
+        percent: 98,
+        message: 'Cleaning up...',
+        stage: 'cleanup',
+      });
+
+      await this.cleanup(workDir);
+
+      options?.onProgress?.({
+        percent: 100,
+        message: 'Assembly complete',
+        stage: 'done',
+      });
+
+      const completedAt = new Date();
+      const output: AssemblyOutput = {
+        videoUrl,
+        videoPath: videoStoragePath,
+        subtitleUrl,
+        subtitlePath,
+        metadata: {
+          duration: timeline.totalDuration,
+          resolution: config.resolution,
+          fileSize: renderResult.fileSize,
+          format: config.format,
+        },
+        timeline: timeline.segments,
+      };
+
+      return {
+        success: true,
+        output,
+        metadata: {
+          startedAt,
+          completedAt,
+          durationMs: completedAt.getTime() - startedAt.getTime(),
+          actualCost: this.estimateCost(input, config),  // Recalculate with actual counts
+          apiCalls,
+        },
+      };
+
+    } catch (error) {
+      await this.cleanup(workDir);
+      return {
+        success: false,
+        error: this.mapError(error),
+      };
+    }
+  }
+
+  // === Private Helpers ===
+
+  private async uploadFile(
+    storage: StorageClient,
+    path: string,
+    localPath: string
+  ): Promise<string> {
+    const fs = await import('fs/promises');
+    const buffer = await fs.readFile(localPath);
+
+    const contentType = path.endsWith('.mp4') ? 'video/mp4' :
+                        path.endsWith('.srt') ? 'text/plain' : 
+                        'application/octet-stream';
+
+    const { error } = await storage.upload(path, buffer, {
+      contentType,
+      upsert: true,
+    });
+
+    if (error) {
+      throw new Error(`Upload failed: ${error.message}`);
+    }
+
+    const { data } = storage.getPublicUrl(path);
+    return data.publicUrl;
+  }
+
+  private async cleanup(workDir: string): Promise<void> {
+    try {
+      await rm(workDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+
+  private mapError(error: unknown): { code: string; message: string; retryable: boolean } {
+    const message = String(error);
+
+    if (message.includes('ENOENT') || message.includes('not found')) {
+      return { code: 'ASSET_NOT_FOUND', message: 'Required asset not found', retryable: false };
+    }
+    if (message.includes('ffmpeg')) {
+      return { code: 'RENDER_ERROR', message: 'Video rendering failed', retryable: true };
+    }
+    if (message.includes('storage') || message.includes('upload')) {
+      return { code: 'UPLOAD_ERROR', message: 'Failed to upload output', retryable: true };
+    }
+
+    return { code: 'ASSEMBLY_ERROR', message: String(error), retryable: true };
+  }
+}
+
+// Helper
+async function writeFile(path: string, content: string): Promise<void> {
+  const fs = await import('fs/promises');
+  await fs.writeFile(path, content, 'utf-8');
+}
+
+type StorageClient = RunContext['services']['storage'];
+```
+
+---
+
+## Part 7: Tests
+
+```typescript
+// src/lib/nodes/assembly/__tests__/assembly.test.ts
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { AssemblyNode } from '../index';
+import { 
+  AssemblyInputSchema, 
+  AssemblyConfigSchema,
+  TimelineSegmentSchema,
+} from '../types';
+import { generateCaptions, generateSrt, formatSrtTime } from '../captions';
+import { buildTimeline } from '../timeline';
+
+describe('AssemblyNode', () => {
+  const node = new AssemblyNode();
+
+  describe('meta', () => {
+    it('has correct id', () => {
+      expect(node.meta.id).toBe('assembly');
+    });
+
+    it('has correct category', () => {
+      expect(node.meta.category).toBe('production');
+    });
+
+    it('estimates longer duration', () => {
+      expect(node.meta.estimatedDuration).toContain('min');
+    });
+  });
+
+  describe('validation', () => {
+    const validInput = {
+      script: {
+        title: 'Test Video',
+        hook: { content: 'Hook', visualNotes: '', durationEstimate: 15 },
+        sections: [
+          { id: 'intro', name: 'Intro', content: 'Content', visualNotes: '', bRollSuggestions: [], durationEstimate: 60 },
+        ],
+        outro: { content: 'Outro', cta: 'Subscribe', visualNotes: '' },
+      },
+      audioSegments: [
+        { id: 'hook', name: 'Hook', audioUrl: 'http://test.com/hook.mp3', durationSeconds: 15 },
+        { id: 'intro', name: 'Intro', audioUrl: 'http://test.com/intro.mp3', durationSeconds: 60 },
+        { id: 'outro', name: 'Outro', audioUrl: 'http://test.com/outro.mp3', durationSeconds: 20 },
+      ],
+    };
+
+    it('accepts valid input', () => {
+      const result = AssemblyInputSchema.safeParse(validInput);
+      expect(result.success).toBe(true);
+    });
+
+    it('validates audio segments exist', () => {
+      const input = { ...validInput, audioSegments: [] };
+      const result = node.validate(
+        input as any,
+        AssemblyConfigSchema.parse({}),
+        {} as any
+      );
+      expect(result.valid).toBe(false);
+    });
+
+    it('warns on missing audio for section', () => {
+      const input = {
+        ...validInput,
+        audioSegments: validInput.audioSegments.filter(a => a.id !== 'intro'),
+      };
+      const result = node.validate(
+        input as any,
+        AssemblyConfigSchema.parse({}),
+        {} as any
+      );
+      expect(result.warnings.length).toBeGreaterThan(0);
+    });
+  });
+});
+
+describe('generateCaptions', () => {
+  it('splits long captions', () => {
+    const segments = [{
+      id: 'test',
+      type: 'content' as const,
+      startTime: 0,
+      duration: 10,
+      visuals: [],
+      caption: 'This is a very long caption that should be split into multiple parts for better readability on screen.',
+    }];
+
+    const captions = generateCaptions(segments, { maxCharsPerCaption: 50 });
+    expect(captions.length).toBeGreaterThan(1);
+  });
+
+  it('assigns correct timing', () => {
+    const segments = [{
+      id: 'test',
+      type: 'content' as const,
+      startTime: 5,
+      duration: 10,
+      visuals: [],
+      caption: 'Short caption.',
+    }];
+
+    const captions = generateCaptions(segments);
+    expect(captions[0].startTime).toBe(5);
+    expect(captions[0].endTime).toBe(15);
+  });
+
+  it('handles empty captions', () => {
+    const segments = [{
+      id: 'test',
+      type: 'content' as const,
+      startTime: 0,
+      duration: 10,
+      visuals: [],
+    }];
+
+    const captions = generateCaptions(segments);
+    expect(captions.length).toBe(0);
+  });
+});
+
+describe('formatSrtTime', () => {
+  it('formats time correctly', () => {
+    expect(formatSrtTime(0)).toBe('00:00:00,000');
+    expect(formatSrtTime(61.5)).toBe('00:01:01,500');
+    expect(formatSrtTime(3661.123)).toBe('01:01:01,123');
+  });
+});
+
+describe('generateSrt', () => {
+  it('produces valid SRT format', () => {
+    const captions = [
+      { index: 1, startTime: 0, endTime: 2, text: 'First caption' },
+      { index: 2, startTime: 2, endTime: 4, text: 'Second caption' },
+    ];
+
+    const srt = generateSrt(captions);
+    
+    expect(srt).toContain('1\n');
+    expect(srt).toContain('00:00:00,000 --> 00:00:02,000');
+    expect(srt).toContain('First caption');
+    expect(srt).toContain('2\n');
+  });
+});
+
+describe('TimelineSegment', () => {
+  it('validates segment structure', () => {
+    const segment = {
+      id: 'test',
+      type: 'content',
+      startTime: 0,
+      duration: 60,
+      audio: {
+        url: 'http://test.com/audio.mp3',
+        volume: 1.0,
+      },
+      visuals: [{
+        source: { type: 'stock', provider: 'pexels', query: 'technology' },
+        layer: 0,
+        startOffset: 0,
+      }],
+    };
+
+    const result = TimelineSegmentSchema.safeParse(segment);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts text_card visual source', () => {
+    const segment = {
+      id: 'test',
+      type: 'content',
+      startTime: 0,
+      duration: 10,
+      visuals: [{
+        source: { type: 'text_card', text: 'Key Point', style: 'quote' },
+        layer: 0,
+        startOffset: 0,
+      }],
+    };
+
+    const result = TimelineSegmentSchema.safeParse(segment);
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('cost estimation', () => {
+  const node = new AssemblyNode();
+  
+  it('estimates higher cost for AI visuals', () => {
+    const input = {
+      script: { title: 'Test', hook: {}, sections: [], outro: {} },
+      audioSegments: [{ id: 'test', name: 'Test', audioUrl: '', durationSeconds: 300 }],
+    } as any;
+
+    const aiCost = node.estimateCost(input, AssemblyConfigSchema.parse({ visualSource: 'ai_generated' }));
+    const stockCost = node.estimateCost(input, AssemblyConfigSchema.parse({ visualSource: 'stock', stockProvider: 'pexels' }));
+
+    expect(aiCost.total).toBeGreaterThan(stockCost.total);
+  });
+
+  it('text cards have zero visual cost', () => {
+    const input = {
+      script: { title: 'Test', hook: {}, sections: [], outro: {} },
+      audioSegments: [{ id: 'test', name: 'Test', audioUrl: '', durationSeconds: 60 }],
+    } as any;
+
+    const cost = node.estimateCost(input, AssemblyConfigSchema.parse({ visualSource: 'text_cards' }));
+    expect(cost.breakdown.find(b => b.service === 'visuals')?.cost).toBe(0);
+  });
+});
+```
+
+---
+
+## Part 8: Register Node
+
+Add to `src/lib/nodes/registry.ts`:
+
+```typescript
+import { AssemblyNode } from './assembly';
+
+// In initialization
+registry.register(new AssemblyNode());
+```
+
+---
+
+## Checklist
+
+- [ ] Create `src/lib/nodes/assembly/types.ts`
+- [ ] Create `src/lib/nodes/assembly/timeline/index.ts`
+- [ ] Create `src/lib/nodes/assembly/visuals/stock.ts` (Pexels client)
+- [ ] Create `src/lib/nodes/assembly/visuals/text-cards.ts`
+- [ ] Create `src/lib/nodes/assembly/captions/index.ts`
+- [ ] Create `src/lib/nodes/assembly/ffmpeg/index.ts`
+- [ ] Create `src/lib/nodes/assembly/index.ts`
+- [ ] Create `src/lib/nodes/assembly/__tests__/assembly.test.ts`
+- [ ] Register node in registry
+- [ ] Test FFmpeg integration locally
+- [ ] All tests passing
+
+---
+
+## Dependencies
+
+Add to `package.json`:
+
+```json
+{
+  "dependencies": {
+    "sharp": "^0.33.0"
+  }
+}
+```
+
+FFmpeg must be installed on the server:
+```bash
+# Ubuntu/Debian
+apt-get install ffmpeg
+
+# macOS
+brew install ffmpeg
+```
+
+---
+
+## Notes
+
+1. **FFmpeg Availability**: Node requires FFmpeg binary. For serverless, consider:
+   - AWS Lambda with FFmpeg layer
+   - Cloud Run with FFmpeg in container
+   - Self-hosted worker with queue
+
+2. **Long Renders**: Videos over 10 minutes can take 5-15 minutes to render. Consider:
+   - Job queue (BullMQ, Inngest)
+   - Progress webhook to client
+   - Background processing
+
+3. **Storage Limits**: Final videos can be 100MB-1GB. Ensure Supabase storage limits are adequate.
+
+4. **Ken Burns Effect**: For images, apply subtle zoom/pan to avoid static visuals. Implemented in FFmpeg filter.
+
+5. **Transitions**: Crossfade between visuals requires careful FFmpeg filter chaining. Start with cuts, add transitions later.
+
+6. **Captions**: Consider Whisper for more accurate word-level timing (vs. estimate from script).
