@@ -18,7 +18,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<PortalRes
     const { returnUrl } = body;
 
     // Get authenticated user
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {

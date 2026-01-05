@@ -11,7 +11,7 @@ interface UsageResponse {
 export async function GET(request: NextRequest): Promise<NextResponse<UsageResponse>> {
   try {
     // Get authenticated user
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {

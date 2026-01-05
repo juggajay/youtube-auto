@@ -28,7 +28,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<CheckoutR
     }
 
     // Get authenticated user
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {

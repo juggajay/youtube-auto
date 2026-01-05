@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get Supabase client
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     // Handle the event
     switch (event.type) {
@@ -132,6 +132,15 @@ async function handleSubscriptionUpdate(
   const planId = subscription.metadata?.planId;
   const includedCredits = parseInt(subscription.metadata?.includedCredits || '0', 10);
 
+  // Get period dates from subscription items (Stripe v20+ API)
+  const subscriptionItem = subscription.items?.data?.[0];
+  const currentPeriodStart = subscriptionItem?.current_period_start
+    ?? (subscription as unknown as { current_period_start?: number }).current_period_start
+    ?? Math.floor(Date.now() / 1000);
+  const currentPeriodEnd = subscriptionItem?.current_period_end
+    ?? (subscription as unknown as { current_period_end?: number }).current_period_end
+    ?? Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+
   // Upsert subscription record
   const { error } = await supabase
     .from('subscriptions')
@@ -142,8 +151,8 @@ async function handleSubscriptionUpdate(
       status: subscription.status,
       plan_id: planId,
       included_credits: includedCredits,
-      current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-      current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+      current_period_start: new Date(currentPeriodStart * 1000).toISOString(),
+      current_period_end: new Date(currentPeriodEnd * 1000).toISOString(),
       cancel_at_period_end: subscription.cancel_at_period_end,
       updated_at: new Date().toISOString(),
     }, {
@@ -160,8 +169,8 @@ async function handleSubscriptionUpdate(
       .from('usage_tracking')
       .upsert({
         user_id: userId,
-        period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-        period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+        period_start: new Date(currentPeriodStart * 1000).toISOString(),
+        period_end: new Date(currentPeriodEnd * 1000).toISOString(),
         credits_used: 0,
         credits_included: includedCredits,
         updated_at: new Date().toISOString(),
@@ -198,21 +207,36 @@ async function handleInvoicePaymentSucceeded(
   invoice: Stripe.Invoice,
   supabase: any
 ) {
-  if (!invoice.subscription) {
+  // Type assertion for subscription property (varies by Stripe API version)
+  const invoiceData = invoice as unknown as {
+    subscription?: string | { id: string };
+    customer?: string | { id: string };
+    created?: number;
+  };
+
+  const subscriptionId = typeof invoiceData.subscription === 'string'
+    ? invoiceData.subscription
+    : invoiceData.subscription?.id;
+
+  if (!subscriptionId) {
     return;
   }
+
+  const customerId = typeof invoiceData.customer === 'string'
+    ? invoiceData.customer
+    : invoiceData.customer?.id;
 
   // Record payment
   const { error } = await supabase
     .from('payments')
     .insert({
       stripe_invoice_id: invoice.id,
-      stripe_subscription_id: invoice.subscription as string,
-      stripe_customer_id: invoice.customer as string,
+      stripe_subscription_id: subscriptionId,
+      stripe_customer_id: customerId,
       amount: invoice.amount_paid,
       currency: invoice.currency,
       status: 'succeeded',
-      created_at: new Date(invoice.created * 1000).toISOString(),
+      created_at: new Date((invoiceData.created ?? Date.now() / 1000) * 1000).toISOString(),
     });
 
   if (error) {
@@ -225,21 +249,36 @@ async function handleInvoicePaymentFailed(
   invoice: Stripe.Invoice,
   supabase: any
 ) {
-  if (!invoice.subscription) {
+  // Type assertion for subscription property (varies by Stripe API version)
+  const invoiceData = invoice as unknown as {
+    subscription?: string | { id: string };
+    customer?: string | { id: string };
+    created?: number;
+  };
+
+  const subscriptionId = typeof invoiceData.subscription === 'string'
+    ? invoiceData.subscription
+    : invoiceData.subscription?.id;
+
+  if (!subscriptionId) {
     return;
   }
+
+  const customerId = typeof invoiceData.customer === 'string'
+    ? invoiceData.customer
+    : invoiceData.customer?.id;
 
   // Record failed payment
   const { error } = await supabase
     .from('payments')
     .insert({
       stripe_invoice_id: invoice.id,
-      stripe_subscription_id: invoice.subscription as string,
-      stripe_customer_id: invoice.customer as string,
+      stripe_subscription_id: subscriptionId,
+      stripe_customer_id: customerId,
       amount: invoice.amount_due,
       currency: invoice.currency,
       status: 'failed',
-      created_at: new Date(invoice.created * 1000).toISOString(),
+      created_at: new Date((invoiceData.created ?? Date.now() / 1000) * 1000).toISOString(),
     });
 
   if (error) {

@@ -7,7 +7,7 @@ import { UsageEventType } from '@/types/billing';
  * Middleware to check if user has an active subscription
  */
 export async function requireSubscription(request: NextRequest) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Get authenticated user
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -89,7 +89,7 @@ export function withUsageTracking(
  * Check subscription status without recording usage
  */
 export async function getSubscriptionStatus(userId: string) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: subscription } = await supabase
     .from('subscriptions')

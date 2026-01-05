@@ -8,7 +8,7 @@ export async function checkUserCredits(
   userId: string,
   eventType: UsageEventType
 ): Promise<CreditCheck> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const creditsNeeded = CREDIT_COSTS[eventType];
 
   // Get active subscription
@@ -60,7 +60,7 @@ export async function recordUsage(
   eventType: UsageEventType,
   metadata?: Record<string, any>
 ): Promise<void> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const credits = CREDIT_COSTS[eventType];
 
   // Call the database function
@@ -81,7 +81,7 @@ export async function recordUsage(
  * Get usage summary for current period
  */
 export async function getUsageSummary(userId: string) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Get active subscription
   const { data: subscription } = await supabase
@@ -114,7 +114,8 @@ export async function getUsageSummary(userId: string) {
 
   // Calculate breakdown by event type
   const breakdown = events?.reduce((acc, event) => {
-    acc[event.event_type] = (acc[event.event_type] || 0) + event.credits_consumed;
+    const eventType = event.event_type as UsageEventType;
+    acc[eventType] = (acc[eventType] || 0) + event.credits_consumed;
     return acc;
   }, {} as Record<UsageEventType, number>);
 

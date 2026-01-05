@@ -1,72 +1,89 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { useRunStore } from '@/lib/stores/runs'
+import { useAuthStore } from '@/lib/stores/auth'
 
-const RECENT_RUNS = [
-  {
-    id: '1',
-    title: 'Top 10 AI Tools for 2024',
-    status: 'running' as const,
-    meta: 'Running - Script generation',
-    time: '2m ago',
-    nodes: [
-      { color: 'var(--node-trigger)', completed: true },
-      { color: 'var(--node-script)', completed: false },
-      { color: 'var(--node-voice)', completed: false },
-      { color: 'var(--node-thumbnail)', completed: false },
-      { color: 'var(--node-assembly)', completed: false },
-      { color: 'var(--node-publish)', completed: false },
-    ],
-  },
-  {
-    id: '2',
-    title: 'Why Python is Taking Over',
-    status: 'success' as const,
-    meta: 'Completed - 8:42 duration',
-    time: '1h ago',
-    nodes: [
-      { color: 'var(--node-trigger)', completed: true },
-      { color: 'var(--node-script)', completed: true },
-      { color: 'var(--node-voice)', completed: true },
-      { color: 'var(--node-thumbnail)', completed: true },
-      { color: 'var(--node-assembly)', completed: true },
-      { color: 'var(--node-publish)', completed: true },
-    ],
-  },
-  {
-    id: '3',
-    title: 'React vs Vue in 2024',
-    status: 'error' as const,
-    meta: 'Failed - Voice generation error',
-    time: '3h ago',
-    nodes: [
-      { color: 'var(--node-trigger)', completed: true },
-      { color: 'var(--node-script)', completed: true },
-      { color: 'var(--status-error)', completed: true },
-      { color: 'var(--node-thumbnail)', completed: false },
-      { color: 'var(--node-assembly)', completed: false },
-      { color: 'var(--node-publish)', completed: false },
-    ],
-  },
-  {
-    id: '4',
-    title: '5 JavaScript Tips You Need',
-    status: 'success' as const,
-    meta: 'Completed - 6:15 duration',
-    time: 'Yesterday',
-    nodes: [
-      { color: 'var(--node-trigger)', completed: true },
-      { color: 'var(--node-script)', completed: true },
-      { color: 'var(--node-voice)', completed: true },
-      { color: 'var(--node-thumbnail)', completed: true },
-      { color: 'var(--node-assembly)', completed: true },
-      { color: 'var(--node-publish)', completed: true },
-    ],
-  },
-]
+function getStatusColor(status: string): string {
+  switch (status) {
+    case 'completed': return 'success'
+    case 'running': return 'running'
+    case 'failed': return 'error'
+    case 'cancelled': return 'error'
+    default: return 'pending'
+  }
+}
+
+function formatTime(dateString: string): string {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'Just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays === 1) return 'Yesterday'
+  return `${diffDays} days ago`
+}
+
+function getNodeProgress(status: string, currentNode: string | null) {
+  const nodeOrder = ['trigger', 'script', 'voice', 'thumbnail', 'assembly', 'publish']
+  const nodeColors: Record<string, string> = {
+    trigger: 'var(--node-trigger)',
+    script: 'var(--node-script)',
+    voice: 'var(--node-voice)',
+    thumbnail: 'var(--node-thumbnail)',
+    assembly: 'var(--node-assembly)',
+    publish: 'var(--node-publish)',
+  }
+
+  const currentIndex = currentNode ? nodeOrder.indexOf(currentNode) : -1
+
+  return nodeOrder.map((node, index) => {
+    let completed = false
+    let color = nodeColors[node]
+
+    if (status === 'completed') {
+      completed = true
+    } else if (status === 'failed') {
+      completed = index <= currentIndex
+      if (index === currentIndex) {
+        color = 'var(--status-error)'
+      }
+    } else if (status === 'running') {
+      completed = index < currentIndex
+    } else {
+      completed = false
+    }
+
+    return { color, completed }
+  })
+}
 
 export default function DashboardPage() {
+  const { runs, isLoading, fetchRuns } = useRunStore()
+  const { isAuthenticated, initialize } = useAuthStore()
+
+  useEffect(() => {
+    initialize()
+  }, [initialize])
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchRuns()
+    }
+  }, [isAuthenticated, fetchRuns])
+
+  // Calculate stats from runs
+  const completedRuns = runs.filter(r => r.status === 'completed')
+  const totalRuns = runs.length
+  const successRate = totalRuns > 0 ? Math.round((completedRuns.length / totalRuns) * 100) : 0
+
   return (
     <div className="app">
       <Sidebar />
@@ -79,42 +96,39 @@ export default function DashboardPage() {
           <div className="dashboard-grid">
             <div className="stat-card">
               <div className="stat-label">Videos Published</div>
-              <div className="stat-value">24</div>
+              <div className="stat-value">{completedRuns.length}</div>
               <div className="stat-change positive">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 15l-6-6-6 6"/>
                 </svg>
-                +3 this week
+                this week
               </div>
             </div>
             <div className="stat-card">
               <div className="stat-label">Pipeline Runs</div>
-              <div className="stat-value">47</div>
+              <div className="stat-value">{totalRuns}</div>
               <div className="stat-change positive">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 15l-6-6-6 6"/>
                 </svg>
-                +12 this week
+                this week
               </div>
             </div>
             <div className="stat-card">
               <div className="stat-label">Success Rate</div>
-              <div className="stat-value">94%</div>
+              <div className="stat-value">{successRate}%</div>
               <div className="stat-change positive">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 15l-6-6-6 6"/>
                 </svg>
-                +2%
+                overall
               </div>
             </div>
             <div className="stat-card">
               <div className="stat-label">API Costs</div>
-              <div className="stat-value">$18</div>
-              <div className="stat-change negative">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M6 9l6 6 6-6"/>
-                </svg>
-                +$4 vs last week
+              <div className="stat-value">$0</div>
+              <div className="stat-change neutral">
+                Estimated
               </div>
             </div>
           </div>
@@ -125,30 +139,54 @@ export default function DashboardPage() {
           </div>
 
           <div className="runs-list">
-            {RECENT_RUNS.map((run) => (
-              <Link key={run.id} href={`/runs/${run.id}`} className="run-item">
-                <div className={`run-status ${run.status}`}></div>
-                <div className="run-info">
-                  <div className="run-title">{run.title}</div>
-                  <div className="run-meta">
-                    <span>{run.meta}</span>
-                  </div>
-                </div>
-                <div className="run-nodes">
-                  {run.nodes.map((node, i) => (
-                    <div
-                      key={i}
-                      className="run-node-dot"
-                      style={{
-                        background: node.color,
-                        opacity: node.completed ? 1 : 0.3,
-                      }}
-                    />
-                  ))}
-                </div>
-                <div className="run-time">{run.time}</div>
-              </Link>
-            ))}
+            {isLoading ? (
+              <div className="loading-state">Loading runs...</div>
+            ) : runs.length === 0 ? (
+              <div className="empty-state">
+                <p>No runs yet. Create a pipeline to get started!</p>
+                <Link href="/pipelines" className="btn btn-primary">
+                  Create Pipeline
+                </Link>
+              </div>
+            ) : (
+              runs.slice(0, 5).map((run) => {
+                const nodes = getNodeProgress(run.status, run.current_node)
+                return (
+                  <Link key={run.id} href={`/runs/${run.id}`} className="run-item">
+                    <div className={`run-status ${getStatusColor(run.status)}`}></div>
+                    <div className="run-info">
+                      <div className="run-title">
+                        {String(run.config?.topic || `Run ${run.id.slice(0, 8)}`)}
+                      </div>
+                      <div className="run-meta">
+                        <span>
+                          {run.status === 'running' && run.current_node
+                            ? `Running - ${run.current_node}`
+                            : run.status === 'completed'
+                            ? 'Completed'
+                            : run.status === 'failed'
+                            ? `Failed${run.error ? ` - ${run.error}` : ''}`
+                            : run.status}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="run-nodes">
+                      {nodes.map((node, i) => (
+                        <div
+                          key={i}
+                          className="run-node-dot"
+                          style={{
+                            background: node.color,
+                            opacity: node.completed ? 1 : 0.3,
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div className="run-time">{formatTime(run.created_at)}</div>
+                  </Link>
+                )
+              })
+            )}
           </div>
         </div>
       </main>
