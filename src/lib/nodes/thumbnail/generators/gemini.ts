@@ -7,15 +7,16 @@ export class GeminiGenerator implements ThumbnailGenerator {
 
   constructor(apiKey: string, options?: { model?: string }) {
     this.apiKey = apiKey;
-    this.model = options?.model ?? 'imagen-3.0-generate-002';
+    // Use Imagen 4.0 for high-quality image generation
+    this.model = options?.model ?? 'imagen-4.0-generate-001';
   }
 
   async generate(params: GenerationParams): Promise<GenerationResult> {
     const { prompt } = params;
 
-    // Gemini Imagen API
+    // Gemini Imagen API - using the predict endpoint for Imagen models
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateImages`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:predict`,
       {
         method: 'POST',
         headers: {
@@ -23,11 +24,10 @@ export class GeminiGenerator implements ThumbnailGenerator {
           'x-goog-api-key': this.apiKey,
         },
         body: JSON.stringify({
-          prompt,
-          config: {
-            numberOfImages: 1,
+          instances: [{ prompt }],
+          parameters: {
+            sampleCount: 1,
             aspectRatio: '16:9',
-            // Gemini may not support exact dimensions, uses aspect ratio
           },
         }),
       }
@@ -39,6 +39,10 @@ export class GeminiGenerator implements ThumbnailGenerator {
     }
 
     const data = await response.json() as {
+      predictions?: Array<{
+        bytesBase64Encoded?: string;
+      }>;
+      // Alternative response format
       generatedImages?: Array<{
         image?: {
           imageBytes?: string;
@@ -46,8 +50,10 @@ export class GeminiGenerator implements ThumbnailGenerator {
       }>;
     };
 
-    // Gemini returns base64 encoded images
-    const imageData = data.generatedImages?.[0]?.image?.imageBytes;
+    // Try both response formats (predict vs generateImages)
+    const imageData = data.predictions?.[0]?.bytesBase64Encoded
+      ?? data.generatedImages?.[0]?.image?.imageBytes;
+
     if (!imageData) {
       throw new Error('No image generated');
     }

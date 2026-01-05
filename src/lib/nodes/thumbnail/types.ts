@@ -110,7 +110,7 @@ export const ThumbnailConfigSchema = z.object({
   generator: z.enum(['gemini', 'dalle', 'flux']).default('gemini'),
 
   // Model-specific settings
-  geminiModel: z.string().default('imagen-3.0-generate-002'),
+  geminiModel: z.string().default('imagen-4.0-generate-001'),
   dalleModel: z.enum(['dall-e-3', 'dall-e-2']).default('dall-e-3'),
   dalleQuality: z.enum(['standard', 'hd']).default('hd'),
 

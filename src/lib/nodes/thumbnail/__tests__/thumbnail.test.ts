@@ -157,7 +157,7 @@ describe('ThumbnailGeneratorNode', () => {
 
       it('uses default models', () => {
         const config = ThumbnailConfigSchema.parse({});
-        expect(config.geminiModel).toBe('imagen-3.0-generate-002');
+        expect(config.geminiModel).toBe('imagen-4.0-generate-001');
         expect(config.dalleModel).toBe('dall-e-3');
         expect(config.dalleQuality).toBe('hd');
       });
