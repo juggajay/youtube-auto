@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk';
 import type {
   NodeContract,
   NodeMeta,
@@ -277,12 +278,56 @@ export class ScriptGeneratorNode implements NodeContract<
       throw new Error('Anthropic API key not configured');
     }
 
-    // TODO: Implement actual API call using Anthropic SDK
-    // For now, this is a placeholder that should be replaced with:
-    // - Anthropic SDK call for Claude models
-    // - OpenAI SDK call for GPT models
+    // Only Claude models are supported for now
+    if (!config.model.includes('claude')) {
+      throw new Error(`Model ${config.model} not supported. Only Claude models are currently implemented.`);
+    }
 
-    throw new Error('LLM integration not implemented - use Anthropic SDK');
+    // Create Anthropic client
+    const client = new Anthropic({ apiKey });
+
+    // Map our model names to Anthropic model IDs
+    const modelMap: Record<string, string> = {
+      'claude-sonnet-4-20250514': 'claude-sonnet-4-20250514',
+      'claude-opus-4-20250514': 'claude-opus-4-20250514',
+    };
+
+    const modelId = modelMap[config.model];
+    if (!modelId) {
+      throw new Error(`Unknown model: ${config.model}`);
+    }
+
+    // Call the Anthropic API
+    const response = await client.messages.create({
+      model: modelId,
+      max_tokens: 8192,
+      temperature: config.temperature,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+    });
+
+    // Check for cancellation after API call
+    if (signal?.aborted) {
+      throw new Error('Request cancelled');
+    }
+
+    // Extract text content from response
+    const textContent = response.content.find(block => block.type === 'text');
+    if (!textContent || textContent.type !== 'text') {
+      throw new Error('No text content in response');
+    }
+
+    return {
+      content: textContent.text,
+      usage: {
+        input_tokens: response.usage.input_tokens,
+        output_tokens: response.usage.output_tokens,
+      },
+    };
   }
 
   private validateSections(output: ScriptOutput, structure: ScriptInput['structure']): void {
