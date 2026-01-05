@@ -5,6 +5,7 @@ import { UsageEventType } from '@/types/billing';
 
 /**
  * Middleware to check if user has an active subscription
+ * In demo mode (no auth), allows limited access
  */
 export async function requireSubscription(request: NextRequest) {
   const supabase = await createServerClient();
@@ -12,11 +13,18 @@ export async function requireSubscription(request: NextRequest) {
   // Get authenticated user
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
+  // DEMO MODE: Allow unauthenticated access with demo user context
   if (authError || !user) {
-    return NextResponse.json(
-      { success: false, error: 'Unauthorized' },
-      { status: 401 }
-    );
+    // Return demo context instead of 401
+    return {
+      user: { id: 'demo-user', email: 'demo@vidflow.app' },
+      subscription: {
+        id: 'demo-subscription',
+        status: 'active',
+        plan_id: 'demo',
+        current_period_end: new Date(Date.now() + 86400000).toISOString()
+      }
+    };
   }
 
   // Check for active subscription

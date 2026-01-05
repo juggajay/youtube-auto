@@ -144,6 +144,14 @@ export async function checkAndRecordUsage(
   metadata?: Record<string, any>
 ): Promise<{ success: boolean; willIncurOverage: boolean; error?: string }> {
   try {
+    // DEMO MODE: Skip usage tracking for demo users
+    if (userId === 'demo-user') {
+      return {
+        success: true,
+        willIncurOverage: false,
+      };
+    }
+
     // Check if user has an active subscription
     const creditCheck = await checkUserCredits(userId, eventType);
 
