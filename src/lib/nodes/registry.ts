@@ -35,8 +35,10 @@ import { TriggerNode } from './trigger';
 import { ScriptGeneratorNode } from './script';
 import { VoiceGeneratorNode } from './voice';
 import { ThumbnailGeneratorNode } from './thumbnail';
+import { AssemblyNode } from './assembly';
 
 nodeRegistry.register(new TriggerNode());
 nodeRegistry.register(new ScriptGeneratorNode());
 nodeRegistry.register(new VoiceGeneratorNode());
 nodeRegistry.register(new ThumbnailGeneratorNode());
+nodeRegistry.register(new AssemblyNode());
