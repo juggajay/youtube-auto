@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withUsageTracking } from '@/lib/billing/middleware';
 
 // Types for request/response
 interface GenerateRequest {
@@ -11,6 +12,7 @@ interface GenerateResponse {
   success: boolean;
   imageBase64?: string;
   error?: string;
+  usageWarning?: string;
 }
 
 // Aspect ratio to Imagen format
@@ -21,7 +23,11 @@ const aspectRatioMap: Record<string, string> = {
   '9:16': '9:16',
 };
 
-export async function POST(request: NextRequest): Promise<NextResponse<GenerateResponse>> {
+// Wrap handler with usage tracking middleware
+export const POST = withUsageTracking('thumbnail_generation', async (
+  request: NextRequest,
+  context: { user: any; subscription: any }
+): Promise<NextResponse<GenerateResponse>> => {
   try {
     const body: GenerateRequest = await request.json();
     const { prompt, aspectRatio, references } = body;
@@ -92,9 +98,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateR
       );
     }
 
+    // Check if response has overage warning
+    const isOverage = request.headers.get('X-VidFlow-Overage') === 'true';
+
     return NextResponse.json({
       success: true,
       imageBase64: imageData,
+      ...(isOverage && {
+        usageWarning: 'You have exceeded your plan\'s included credits. Additional charges will apply.'
+      }),
     });
   } catch (error) {
     console.error('Generation error:', error);
@@ -106,4 +118,4 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateR
       { status: 500 }
     );
   }
-}
+});

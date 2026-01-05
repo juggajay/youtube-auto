@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VidFlow | The Automation Experience</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #050505;
+            --text-main: #ffffff;
+            --text-muted: #888888;
+            --gold-primary: #FFD700;
+            --gold-secondary: #B8860B;
+            --gold-glow: rgba(255, 215, 0, 0.3);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; cursor: none; /* Custom cursor */ }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            overflow-x: hidden;
+            width: 100vw;
+        }
+
+        /* --- Custom Cursor --- */
+        #cursor {
+            width: 20px;
+            height: 20px;
+            border: 1px solid var(--gold-primary);
+            border-radius: 50%;
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            transition: transform 0.1s;
+            mix-blend-mode: difference;
+        }
+        #cursor-dot {
+            width: 4px;
+            height: 4px;
+            background: var(--gold-primary);
+            border-radius: 50%;
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* --- Background Canvas --- */
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.4;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 2; }
+
+        /* --- Typography & Text Reveal --- */
+        .reveal-text {
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: bottom;
+        }
+        
+        .reveal-text span {
+            display: inline-block;
+            transform: translateY(100%);
+            opacity: 0;
+            transition: transform 1s cubic-bezier(0.16, 1, 0.3, 1), opacity 1s ease;
+        }
+
+        .revealed span {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        /* --- Hero Section --- */
+        .hero {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            perspective: 1000px;
+        }
+
+        .hero-content {
+            text-align: center;
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 8vw;
+            line-height: 0.9;
+            font-weight: 700;
+            margin-bottom: 2rem;
+            text-transform: uppercase;
+            letter-spacing: -0.02em;
+        }
+
+        .text-gradient {
+            background: linear-gradient(180deg, #fff 0%, #666 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .text-gold {
+            background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.2);
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto 3rem;
+            opacity: 0;
+            animation: fadeIn 1s ease forwards 1s;
+        }
+
+        @keyframes fadeIn { to { opacity: 1; } }
+
+        /* --- 3D Floating Elements --- */
+        .floating-ui {
+            position: absolute;
+            background: rgba(20, 20, 20, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            pointer-events: none;
+            opacity: 0;
+        }
+
+        /* --- The Pipeline (Connecting Line) --- */
+        .pipeline-container {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 400vh; /* Long enough for scroll */
+            z-index: 1;
+        }
+
+        .pipeline-track {
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            position: relative;
+        }
+
+        .pipeline-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 0%; /* JS will update this */
+            background: linear-gradient(180deg, var(--gold-primary), var(--gold-secondary));
+            box-shadow: 0 0 20px var(--gold-primary);
+            transition: height 0.1s linear;
+        }
+
+        /* --- 3D Tilt Cards --- */
+        .cards-section {
+            padding: 100px 0;
+            perspective: 1500px;
+        }
+
+        .tilt-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 40px;
+        }
+
+        .tilt-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 40px;
+            position: relative;
+            transform-style: preserve-3d;
+            transform: rotateX(0) rotateY(0);
+            transition: transform 0.1s; /* Fast for mouse follow */
+        }
+
+        .tilt-card::before { /* Glow effect */
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            border-radius: 20px;
+            background: radial-gradient(800px circle at var(--mouse-x) var(--mouse-y), rgba(255,255,255,0.06), transparent 40%);
+            opacity: 0;
+            transition: opacity 0.5s;
+            pointer-events: none;
+        }
+
+        .tilt-card:hover::before { opacity: 1; }
+
+        .card-content {
+            transform: translateZ(30px); /* Pop out text */
+        }
+
+        /* --- Dynamic Feature Section --- */
+        .dynamic-feature {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            opacity: 0.2;
+            transition: opacity 0.5s;
+        }
+        .dynamic-feature.active { opacity: 1; }
+
+        .feature-text { max-width: 400px; }
+        .feature-text h2 { font-size: 3rem; margin-bottom: 1rem; }
+        
+        .feature-visual {
+            width: 500px;
+            height: 400px;
+            background: #111;
+            border-radius: 20px;
+            border: 1px solid #333;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* --- Magnetic Button --- */
+        .magnetic-btn {
+            display: inline-block;
+            background: var(--gold-primary);
+            color: #000;
+            padding: 20px 40px;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 1.2rem;
+            text-decoration: none;
+            position: relative;
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            z-index: 20;
+        }
+        .magnetic-btn:hover { transform: scale(1.1); }
+
+    </style>
+</head>
+<body>
+
+    <div id="cursor"></div>
+    <div id="cursor-dot"></div>
+    <canvas id="canvas-container"></canvas>
+
+    <!-- The Central Pipeline Scroll Line -->
+    <div class="pipeline-container">
+        <div class="pipeline-track">
+            <div class="pipeline-fill" id="pipeline-fill"></div>
+        </div>
+    </div>
+
+    <!-- Floating UI Elements (Parallax) -->
+    <div class="floating-ui" style="top: 20%; left: 10%; transform: rotate(-5deg);" data-speed="2">
+        <i data-lucide="zap" color="#FFD700" size="16"></i> <span>Auto-Trigger: Viral Trend Detected</span>
+    </div>
+    <div class="floating-ui" style="top: 30%; right: 15%; transform: rotate(5deg);" data-speed="-3">
+        <i data-lucide="mic" color="#10b981" size="16"></i> <span>Voice Cloning: 99% Match</span>
+    </div>
+    <div class="floating-ui" style="bottom: 20%; left: 15%; transform: rotate(3deg);" data-speed="4">
+        <i data-lucide="youtube" color="#ef4444" size="16"></i> <span>Publishing to 4 Channels...</span>
+    </div>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1 class="reveal-text">
+                <span class="text-gradient">Automate Your</span><br>
+                <span class="text-gold">Creative Empire</span>
+            </h1>
+            <p>
+                The first modular pipeline for professional YouTube automation.<br>
+                Script. Voice. Edit. Publish. <span style="color: #fff;">Zero Grind.</span>
+            </p>
+            <br>
+            <a href="#" class="magnetic-btn" id="hero-cta">Start Building</a>
+        </div>
+    </section>
+
+    <!-- 3D CARDS -->
+    <section class="container cards-section">
+        <div class="tilt-grid">
+            <div class="tilt-card">
+                <div class="card-content">
+                    <i data-lucide="git-merge" color="#FFD700" size="40" style="margin-bottom: 20px;"></i>
+                    <h3>Visual Logic</h3>
+                    <p style="color: #888; margin-top: 10px;">Drag, drop, and connect nodes. Build workflows like you build lego.</p>
+                </div>
+            </div>
+            <div class="tilt-card">
+                <div class="card-content">
+                    <i data-lucide="cpu" color="#FFD700" size="40" style="margin-bottom: 20px;"></i>
+                    <h3>AI Symphony</h3>
+                    <p style="color: #888; margin-top: 10px;">Orchestrate Claude 3.5, ElevenLabs, and Midjourney in one flow.</p>
+                </div>
+            </div>
+            <div class="tilt-card">
+                <div class="card-content">
+                    <i data-lucide="infinity" color="#FFD700" size="40" style="margin-bottom: 20px;"></i>
+                    <h3>Infinite Scale</h3>
+                    <p style="color: #888; margin-top: 10px;">Run 1 channel or 100. The pipeline doesn't sleep.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SCROLL STORY -->
+    <section class="container" style="position: relative;">
+        <!-- Step 1 -->
+        <div class="dynamic-feature" id="feat-1">
+            <div class="feature-text">
+                <span style="color: var(--gold-primary); font-family: monospace;">01_TRIGGER</span>
+                <h2>Spot the Trend.</h2>
+                <p style="color: #888; font-size: 1.2rem;">VidFlow watches the internet. When a topic spikes in your niche, the pipeline wakes up.</p>
+            </div>
+            <div class="feature-visual" style="background: radial-gradient(circle at center, #222, #000);">
+                <!-- CSS Animation for a radar pulse -->
+                <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+                    <div style="width: 10px; height: 10px; background: var(--gold-primary); border-radius: 50%; box-shadow: 0 0 20px var(--gold-primary); animation: pulse 2s infinite;"></div>
+                    <div style="position: absolute; width: 200px; height: 200px; border: 1px solid #333; border-radius: 50%; animation: ping 2s infinite;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="dynamic-feature" id="feat-2">
+            <div class="feature-visual" style="order: 2; border-color: #333;">
+                <div style="padding: 40px; color: #444; font-family: monospace; font-size: 14px;">
+                    > Generating Script...<br>
+                    > Tone: Witty/Tech<br>
+                    > Analyzing Competitors...<br>
+                    <span style="color: #fff;">> Hook generated: "Stop buying generic AI tools."</span><br>
+                    > <span style="background: #fff; width: 10px; height: 14px; display: inline-block; animation: blink 1s infinite;"></span>
+                </div>
+            </div>
+            <div class="feature-text" style="order: 1; text-align: right;">
+                <span style="color: var(--gold-primary); font-family: monospace;">02_SYNTHESIS</span>
+                <h2>Script & Voice.</h2>
+                <p style="color: #888; font-size: 1.2rem;">Your Channel Bible guides the AI. It speaks your language, uses your vocabulary, and clones your voice perfectly.</p>
+            </div>
+        </div>
+    </section>
+
+    <footer style="height: 50vh; display: flex; align-items: center; justify-content: center; text-align: center; border-top: 1px solid #222; margin-top: 100px;">
+        <div>
+            <h2 style="font-size: 4rem; margin-bottom: 2rem;">Stop Grinding.</h2>
+            <a href="#" class="magnetic-btn">Join The Beta</a>
+        </div>
+    </footer>
+
+    <style>
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1); opacity: 0.5; } }
+        @keyframes ping { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
+        @keyframes blink { 50% { opacity: 0; } }
+    </style>
+
+    <script>
+        lucide.createIcons();
+
+        // --- 1. Custom Cursor Logic ---
+        const cursor = document.getElementById('cursor');
+        const dot = document.getElementById('cursor-dot');
+        
+        document.addEventListener('mousemove', (e) => {
+            dot.style.left = e.clientX + 'px';
+            dot.style.top = e.clientY + 'px';
+            
+            // Delay for the ring
+            setTimeout(() => {
+                cursor.style.transform = `translate(${e.clientX - 10}px, ${e.clientY - 10}px)`;
+            }, 50);
+        });
+
+        // --- 2. Text Reveal Animation ---
+        window.addEventListener('load', () => {
+            const reveals = document.querySelectorAll('.reveal-text');
+            reveals.forEach(el => {
+                const text = el.innerText;
+                el.innerHTML = '';
+                // Simple word split for demonstration
+                text.split(' ').forEach((word, i) => {
+                    const span = document.createElement('span');
+                    span.innerText = word + ' ';
+                    span.style.transitionDelay = `${i * 0.1}s`;
+                    el.appendChild(span);
+                });
+                setTimeout(() => el.classList.add('revealed'), 100);
+            });
+
+            // Float UI In
+            const floaters = document.querySelectorAll('.floating-ui');
+            floaters.forEach((el, i) => {
+                setTimeout(() => {
+                    el.style.opacity = '1';
+                    el.style.transform += ' translateY(0)';
+                }, 500 + (i * 200));
+            });
+        });
+
+        // --- 3. Parallax Floating Elements ---
+        document.addEventListener('mousemove', (e) => {
+            const x = (window.innerWidth - e.pageX * 2) / 100;
+            const y = (window.innerHeight - e.pageY * 2) / 100;
+
+            document.querySelectorAll('.floating-ui').forEach(el => {
+                const speed = el.getAttribute('data-speed');
+                el.style.transform = `translateX(${x * speed}px) translateY(${y * speed}px) rotate(${el.style.transform.match(/rotate\((.*?)\)/)[1]})`;
+            });
+        });
+
+        // --- 4. 3D Tilt Cards ---
+        document.querySelectorAll('.tilt-card').forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Set glow position
+                card.style.setProperty('--mouse-x', `${x}px`);
+                card.style.setProperty('--mouse-y', `${y}px`);
+
+                // Calculate tilt
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const rotateX = ((y - centerY) / centerY) * -10; // Max 10deg
+                const rotateY = ((x - centerX) / centerX) * 10;
+
+                card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.05, 1.05, 1.05)`;
+            });
+
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) scale3d(1, 1, 1)';
+            });
+        });
+
+        // --- 5. Pipeline Scroll & Feature Reveal ---
+        window.addEventListener('scroll', () => {
+            const scrollPct = window.scrollY / (document.body.scrollHeight - window.innerHeight);
+            const fillHeight = Math.min(scrollPct * 150, 100); // Accelerate fill
+            document.getElementById('pipeline-fill').style.height = `${fillHeight}%`;
+
+            // Active Features
+            document.querySelectorAll('.dynamic-feature').forEach(feat => {
+                const rect = feat.getBoundingClientRect();
+                if (rect.top < window.innerHeight / 1.5 && rect.bottom > 0) {
+                    feat.classList.add('active');
+                } else {
+                    feat.classList.remove('active');
+                }
+            });
+        });
+
+        // --- 6. Particle Canvas (Gold Dust) ---
+        const canvas = document.getElementById('canvas-container');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const particles = [];
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 2;
+                this.speedX = Math.random() * 1 - 0.5;
+                this.speedY = Math.random() * 1 - 0.5;
+                this.color = '#FFD700'; // Gold
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                if (this.x > canvas.width) this.x = 0;
+                if (this.x < 0) this.x = canvas.width;
+                if (this.y > canvas.height) this.y = 0;
+                if (this.y < 0) this.y = canvas.height;
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        for (let i = 0; i < 50; i++) particles.push(new Particle());
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+                
+                // Draw connections
+                for (let j = i; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 150) {
+                        ctx.strokeStyle = `rgba(255, 215, 0, ${1 - dist/150 * 0.5})`; // Gold lines
+                        ctx.lineWidth = 0.5;
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+            requestAnimationFrame(animateParticles);
+        }
+        animateParticles();
+
+    </script>
+</body>
+</html>

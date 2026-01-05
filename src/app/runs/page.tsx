@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { Sidebar } from '@/components/layout/Sidebar'
 
-const RECENT_RUNS = [
+const ALL_RUNS = [
   {
     id: '1',
     title: 'Top 10 AI Tools for 2024',
@@ -64,68 +64,35 @@ const RECENT_RUNS = [
       { color: 'var(--node-publish)', completed: true },
     ],
   },
+  {
+    id: '5',
+    title: 'Building a SaaS in 30 Days',
+    status: 'success' as const,
+    meta: 'Completed - 12:30 duration',
+    time: '2 days ago',
+    nodes: [
+      { color: 'var(--node-trigger)', completed: true },
+      { color: 'var(--node-script)', completed: true },
+      { color: 'var(--node-voice)', completed: true },
+      { color: 'var(--node-thumbnail)', completed: true },
+      { color: 'var(--node-assembly)', completed: true },
+      { color: 'var(--node-publish)', completed: true },
+    ],
+  },
 ]
 
-export default function DashboardPage() {
+export default function RunsListPage() {
   return (
     <div className="app">
       <Sidebar />
       <main className="main">
         <header className="header">
-          <h1 className="header-title">Dashboard</h1>
+          <h1 className="header-title">All Runs</h1>
         </header>
 
         <div className="dashboard">
-          <div className="dashboard-grid">
-            <div className="stat-card">
-              <div className="stat-label">Videos Published</div>
-              <div className="stat-value">24</div>
-              <div className="stat-change positive">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 15l-6-6-6 6"/>
-                </svg>
-                +3 this week
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Pipeline Runs</div>
-              <div className="stat-value">47</div>
-              <div className="stat-change positive">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 15l-6-6-6 6"/>
-                </svg>
-                +12 this week
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Success Rate</div>
-              <div className="stat-value">94%</div>
-              <div className="stat-change positive">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 15l-6-6-6 6"/>
-                </svg>
-                +2%
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">API Costs</div>
-              <div className="stat-value">$18</div>
-              <div className="stat-change negative">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M6 9l6 6 6-6"/>
-                </svg>
-                +$4 vs last week
-              </div>
-            </div>
-          </div>
-
-          <div className="section-header">
-            <h2 className="section-title">Recent Runs</h2>
-            <Link href="/runs" className="section-link">View all</Link>
-          </div>
-
           <div className="runs-list">
-            {RECENT_RUNS.map((run) => (
+            {ALL_RUNS.map((run) => (
               <Link key={run.id} href={`/runs/${run.id}`} className="run-item">
                 <div className={`run-status ${run.status}`}></div>
                 <div className="run-info">
