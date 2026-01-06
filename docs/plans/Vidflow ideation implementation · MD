@@ -1241,4 +1241,4 @@ Format with emojis for visual separation.
 ### Integration
 - [ ] Ideation → Content Library → Script Node full flow
 - [ ] @mention autocomplete shows content tags
-- [ ] used_count increments when content used in pipeline
+- [ ] used_count increments when content used in pipelineimages in playw

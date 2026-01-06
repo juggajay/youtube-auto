@@ -9,6 +9,9 @@ export type HookStyle = 'question' | 'statistic' | 'story' | 'controversy' | 'pr
 export type HookTone = 'dramatic' | 'conversational' | 'mysterious';
 export type ScriptModel = 'claude-sonnet' | 'claude-opus' | 'gpt-4' | 'gpt-4-turbo';
 
+// Content Library integration
+export type ContentSourceMode = 'saved' | 'examples' | 'fresh';
+
 export interface ScriptSection {
   id: string;
   name: string;
@@ -36,17 +39,23 @@ export interface ScriptNodeConfig {
   allowReorder: boolean;
 
   // Hooks
+  hookSourceMode: ContentSourceMode;
+  selectedHookIds: string[]; // IDs from content library
   hooksToGenerate: number; // 1-5
   hookStyle: HookStyle;
   hookTone: HookTone;
 
   // Titles
+  titleSourceMode: ContentSourceMode;
+  selectedTitleIds: string[]; // IDs from content library
   titlesToGenerate: number; // 1-10
   titlePatterns: string[];
   powerWords: string[];
   titleMaxLength: number;
 
   // Description
+  descriptionSourceMode: ContentSourceMode;
+  selectedDescriptionId: string | null; // ID from content library
   descriptionTemplate: string;
   descriptionVariables: Record<string, string>;
   includeTimestamps: boolean;
@@ -241,13 +250,19 @@ const defaultScriptConfig: ScriptNodeConfig = {
   archetypeId: '',
   sections: [],
   allowReorder: true,
+  hookSourceMode: 'fresh',
+  selectedHookIds: [],
   hooksToGenerate: 3,
   hookStyle: 'question',
   hookTone: 'conversational',
+  titleSourceMode: 'fresh',
+  selectedTitleIds: [],
   titlesToGenerate: 5,
   titlePatterns: ['how-to', 'number-list'],
   powerWords: ['Secret', 'Ultimate', 'Proven'],
   titleMaxLength: 60,
+  descriptionSourceMode: 'fresh',
+  selectedDescriptionId: null,
   descriptionTemplate: '',
   descriptionVariables: {},
   includeTimestamps: true,

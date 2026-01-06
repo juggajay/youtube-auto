@@ -391,6 +391,65 @@ export interface PublishGeneratedContent {
 }
 
 // ============================================================================
+// Content Library Types
+// ============================================================================
+
+export type ContentType = 'hook' | 'title' | 'description' | 'intro' | 'cta' | 'outline' | 'script';
+
+export interface ContentLibraryRow {
+  id: string;
+  user_id: string;
+  name: string;
+  type: ContentType;
+  content: string;
+  tags: string[];
+  topic: string | null;
+  archetype: string | null;
+  metadata: Record<string, unknown>;
+  used_count: number;
+  last_used_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContentLibraryInsert {
+  user_id: string;
+  name: string;
+  type: ContentType;
+  content: string;
+  tags?: string[];
+  topic?: string | null;
+  archetype?: string | null;
+  metadata?: Record<string, unknown>;
+  used_count?: number;
+  last_used_at?: string | null;
+}
+
+export interface ContentLibraryUpdate {
+  name?: string;
+  type?: ContentType;
+  content?: string;
+  tags?: string[];
+  topic?: string | null;
+  archetype?: string | null;
+  metadata?: Record<string, unknown>;
+  used_count?: number;
+  last_used_at?: string | null;
+}
+
+// Type aliases for cleaner API usage
+export type ContentItem = ContentLibraryRow;
+export type ContentItemInsert = ContentLibraryInsert;
+export type ContentItemUpdate = ContentLibraryUpdate;
+
+export interface ResolvedContent {
+  tag: string;
+  id: string;
+  content: string;
+  type: ContentType;
+}
+
+// ============================================================================
 // Element Types (User uploaded assets like logos, overlays, etc.)
 // ============================================================================
 
@@ -533,6 +592,11 @@ export interface Database {
         Insert: ElementInsert;
         Update: ElementUpdate;
       };
+      content_library: {
+        Row: ContentItem;
+        Insert: ContentItemInsert;
+        Update: ContentItemUpdate;
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -542,6 +606,7 @@ export interface Database {
       intervention_status: InterventionStatus;
       hook_style: HookStyle;
       element_type: ElementType;
+      content_type: ContentType;
     };
   };
 }
