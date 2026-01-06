@@ -135,7 +135,7 @@ export const useIdeationStore = create<IdeationStore>()(
           ? completedSteps
           : [...completedSteps, currentStep];
 
-        if (currentStep < 3) {
+        if (currentStep < 4) {
           set({
             currentStep: currentStep + 1,
             completedSteps: newCompletedSteps,
@@ -152,7 +152,7 @@ export const useIdeationStore = create<IdeationStore>()(
       },
 
       goToStep: (step: number) => {
-        if (step >= 0 && step <= 3) {
+        if (step >= 0 && step <= 4) {
           set({ currentStep: step, error: null });
         }
       },

@@ -125,57 +125,59 @@ export default function IdeationPage() {
           )}
         </div>
 
-        {/* Navigation footer */}
-        <footer className="ideation-footer">
-          <div className="ideation-footer-content">
-            <button
-              className="ideation-btn ideation-btn-secondary"
-              onClick={prevStep}
-              disabled={currentStep === 0}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-              Back
-            </button>
-
-            <div className="ideation-footer-center">
-              <span className="ideation-step-indicator">
-                Step {currentStep + 1} of {STEP_LABELS.length}
-              </span>
-            </div>
-
-            <div className="ideation-footer-actions">
-              {canSkip && (
-                <button
-                  className="ideation-btn ideation-btn-ghost"
-                  onClick={handleSkip}
-                >
-                  Skip
-                </button>
-              )}
+        {/* Navigation footer - hidden on Summary step */}
+        {currentStep < 4 && (
+          <footer className="ideation-footer">
+            <div className="ideation-footer-content">
               <button
-                className="ideation-btn ideation-btn-primary"
-                onClick={handleNext}
-                disabled={!canProceed() || isLoading}
+                className="ideation-btn ideation-btn-secondary"
+                onClick={prevStep}
+                disabled={currentStep === 0}
               >
-                {isLoading ? (
-                  <>
-                    <span className="ideation-spinner" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    {getNextButtonText()}
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M5 12h14M12 5l7 7-7 7" />
-                    </svg>
-                  </>
-                )}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg>
+                Back
               </button>
+
+              <div className="ideation-footer-center">
+                <span className="ideation-step-indicator">
+                  Step {currentStep + 1} of {STEP_LABELS.length}
+                </span>
+              </div>
+
+              <div className="ideation-footer-actions">
+                {canSkip && (
+                  <button
+                    className="ideation-btn ideation-btn-ghost"
+                    onClick={handleSkip}
+                  >
+                    Skip
+                  </button>
+                )}
+                <button
+                  className="ideation-btn ideation-btn-primary"
+                  onClick={handleNext}
+                  disabled={!canProceed() || isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <span className="ideation-spinner" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      {getNextButtonText()}
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                      </svg>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
-        </footer>
+          </footer>
+        )}
       </main>
 
       <style jsx>{`
