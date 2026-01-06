@@ -3,22 +3,17 @@
 import { useIdeationStore } from '@/stores/ideationStore';
 import { useCallback, useMemo } from 'react';
 
-// Power words commonly used in viral titles
 const POWER_WORDS = [
   'Secret', 'Hidden', 'Shocking', 'Ultimate', 'Proven',
   'Never', 'Always', 'Truth', 'Exposed', 'Revealed',
   'Amazing', 'Essential', 'Revolutionary', 'Exclusive', 'Insane',
 ];
 
-function getCharCountColor(count: number): { color: string; label: string } {
-  if (count <= 50) {
-    return { color: 'text-emerald-400', label: 'Perfect' };
-  } else if (count <= 60) {
-    return { color: 'text-amber-400', label: 'Good' };
-  } else if (count <= 70) {
-    return { color: 'text-orange-400', label: 'Long' };
-  }
-  return { color: 'text-red-400', label: 'Too long' };
+function getCharCountColor(count: number): { color: string; label: string; bg: string } {
+  if (count <= 50) return { color: 'text-emerald-400', label: 'Perfect', bg: 'bg-emerald-500/20' };
+  if (count <= 60) return { color: 'text-cyan-400', label: 'Good', bg: 'bg-cyan-500/20' };
+  if (count <= 70) return { color: 'text-amber-400', label: 'Long', bg: 'bg-amber-500/20' };
+  return { color: 'text-red-400', label: 'Too long', bg: 'bg-red-500/20' };
 }
 
 function highlightPowerWords(text: string): React.ReactNode[] {
@@ -29,11 +24,7 @@ function highlightPowerWords(text: string): React.ReactNode[] {
       pw => cleanWord.toLowerCase() === pw.toLowerCase()
     );
     if (isPowerWord) {
-      return (
-        <span key={i} className="text-cyan-300 font-semibold">
-          {word}
-        </span>
-      );
+      return <span key={i} className="text-cyan-300 font-semibold">{word}</span>;
     }
     return <span key={i}>{word}</span>;
   });
@@ -66,232 +57,617 @@ export function TitlesStep() {
     generateTitles(3);
   }, [generateTitles]);
 
+  const hasContent = generatedTitles.length > 0;
+
   return (
     <div className="titles-step">
-      {/* Header Section */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-            </svg>
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">Generate Titles</h2>
-            <p className="text-sm text-slate-400">Create click-worthy titles for your video</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Context Panel */}
+      {/* Context - Selected Hooks */}
       {selectedHooks.length > 0 && (
-        <div className="mb-6 p-4 rounded-xl bg-slate-800/50 border border-slate-700/50 backdrop-blur">
-          <div className="flex items-center gap-2 mb-3">
-            <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-sm font-medium text-slate-300">Based on your selected hooks:</span>
+        <div className="context-panel">
+          <div className="context-header">
+            <span className="context-dot" />
+            <span className="context-label">Based on your hooks</span>
           </div>
-          <div className="space-y-2">
-            {selectedHooks.map((hook) => (
-              <div
-                key={hook.id}
-                className="text-sm text-slate-400 pl-4 border-l-2 border-cyan-500/30"
-              >
-                &ldquo;{hook.content}&rdquo;
-              </div>
+          <div className="context-items">
+            {selectedHooks.slice(0, 2).map((hook) => (
+              <p key={hook.id} className="context-item">&ldquo;{hook.content}&rdquo;</p>
             ))}
+            {selectedHooks.length > 2 && (
+              <span className="context-more">+{selectedHooks.length - 2} more</span>
+            )}
           </div>
         </div>
       )}
 
-      {/* Generate Button */}
-      {generatedTitles.length === 0 && (
-        <button
-          onClick={handleGenerate}
-          disabled={isGeneratingTitles}
-          className="w-full group relative overflow-hidden rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 p-px mb-8 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <div className="relative flex items-center justify-center gap-3 px-6 py-4 bg-slate-900/90 rounded-[11px] group-hover:bg-slate-900/70 transition-colors">
-            {isGeneratingTitles ? (
-              <>
-                <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                <span className="text-cyan-400 font-semibold">Generating Titles...</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+      {/* Empty State / Generate */}
+      {!hasContent && (
+        <div className="empty-state">
+          <div className="empty-content">
+            <div className="empty-icon-row">
+              <div className="empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M7 8h10M7 12h6" />
+                  <rect x="3" y="4" width="18" height="14" rx="2" />
                 </svg>
-                <span className="text-cyan-400 font-semibold">Generate Titles</span>
-              </>
-            )}
+              </div>
+              <div className="empty-line" />
+              <div className="empty-badge">5 titles</div>
+            </div>
+
+            <h3 className="empty-title">Generate Titles</h3>
+            <p className="empty-desc">
+              Create click-worthy titles optimized for YouTube search and discovery
+            </p>
+
+            <button
+              onClick={handleGenerate}
+              disabled={isGeneratingTitles}
+              className="generate-btn"
+            >
+              {isGeneratingTitles ? (
+                <>
+                  <span className="spinner" />
+                  <span>Generating...</span>
+                </>
+              ) : (
+                <>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                  </svg>
+                  <span>Generate Titles</span>
+                </>
+              )}
+            </button>
+
+            <div className="empty-hints">
+              <div className="hint">
+                <span className="hint-dot hint-dot-green" />
+                <span>50-60 chars ideal</span>
+              </div>
+              <div className="hint">
+                <span className="hint-dot hint-dot-purple" />
+                <span>Numbers boost CTR</span>
+              </div>
+              <div className="hint">
+                <span className="hint-dot hint-dot-cyan" />
+                <span>Power words convert</span>
+              </div>
+            </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* Loading State */}
-      {isGeneratingTitles && generatedTitles.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16">
-          <div className="relative w-16 h-16 mb-4">
-            <div className="absolute inset-0 rounded-full border-4 border-slate-700" />
-            <div className="absolute inset-0 rounded-full border-4 border-cyan-500 border-t-transparent animate-spin" />
-            <div className="absolute inset-2 rounded-full border-4 border-cyan-400/30 border-t-transparent animate-spin" style={{ animationDuration: '1.5s' }} />
+      {isGeneratingTitles && !hasContent && (
+        <div className="loading-overlay">
+          <div className="loading-content">
+            <div className="loading-bars">
+              <div className="bar bar-1" />
+              <div className="bar bar-2" />
+              <div className="bar bar-3" />
+            </div>
+            <span className="loading-text">Crafting titles...</span>
           </div>
-          <p className="text-slate-400 animate-pulse">Crafting click-worthy titles...</p>
         </div>
       )}
 
       {/* Titles Grid */}
-      {generatedTitles.length > 0 && (
-        <>
-          {/* Selection Counter */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-400">Select titles to save:</span>
-              {selectedTitleIds.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 text-xs font-medium">
-                  {selectedTitleIds.length} selected
-                </span>
-              )}
-            </div>
+      {hasContent && (
+        <div className="titles-section">
+          <div className="titles-header">
+            <span className="titles-count">{generatedTitles.length} titles</span>
+            {selectedTitleIds.length > 0 && (
+              <span className="selection-badge">{selectedTitleIds.length} selected</span>
+            )}
           </div>
 
-          {/* Titles Cards */}
-          <div className="grid gap-3 mb-6">
+          <div className="titles-grid">
             {generatedTitles.map((title, index) => {
               const isSelected = selectedTitleIds.includes(title.id);
               const charCount = title.charCount || title.content.length;
-              const { color: charColor, label: charLabel } = getCharCountColor(charCount);
+              const { color: charColor, label: charLabel, bg: charBg } = getCharCountColor(charCount);
               const titleHasNumber = title.hasNumber ?? hasNumber(title.content);
 
               return (
-                <div
+                <button
                   key={title.id}
                   onClick={() => toggleTitleSelection(title.id)}
-                  className={`
-                    group relative cursor-pointer rounded-xl border-2 p-4 transition-all duration-200
-                    ${isSelected
-                      ? 'border-cyan-500 bg-cyan-500/5 shadow-lg shadow-cyan-500/10'
-                      : 'border-slate-700/50 bg-slate-800/30 hover:border-slate-600 hover:bg-slate-800/50'
-                    }
-                  `}
-                  style={{
-                    animationDelay: `${index * 50}ms`,
-                  }}
+                  className={`title-card ${isSelected ? 'selected' : ''}`}
+                  style={{ animationDelay: `${index * 50}ms` }}
                 >
-                  {/* Selection Checkbox */}
-                  <div className="absolute top-4 right-4">
-                    <div
-                      className={`
-                        w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all
-                        ${isSelected
-                          ? 'border-cyan-500 bg-cyan-500'
-                          : 'border-slate-600 bg-slate-800 group-hover:border-slate-500'
-                        }
-                      `}
-                    >
-                      {isSelected && (
-                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        </svg>
+                  <div className="title-content">
+                    <p className="title-text">{highlightPowerWords(title.content)}</p>
+                    <div className="title-meta">
+                      <span className={`char-badge ${charBg} ${charColor}`}>
+                        {charCount} · {charLabel}
+                      </span>
+                      {titleHasNumber && (
+                        <span className="feature-badge">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                          </svg>
+                          Number
+                        </span>
+                      )}
+                      {title.hasPowerWord && (
+                        <span className="feature-badge feature-badge-cyan">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                          </svg>
+                          Power
+                        </span>
                       )}
                     </div>
                   </div>
-
-                  {/* Title Content */}
-                  <div className="pr-10 mb-3">
-                    <p className="text-lg text-white font-medium leading-relaxed">
-                      {highlightPowerWords(title.content)}
-                    </p>
-                  </div>
-
-                  {/* Meta Info */}
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {/* Character Count */}
-                    <div className={`flex items-center gap-1.5 text-xs ${charColor}`}>
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                  <div className="title-check">
+                    {isSelected ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="20 6 9 17 4 12" />
                       </svg>
-                      <span className="font-mono">{charCount} chars</span>
-                      <span className="text-slate-500">({charLabel})</span>
-                    </div>
-
-                    {/* Number Indicator */}
-                    {titleHasNumber && (
-                      <div className="flex items-center gap-1.5 text-xs text-purple-400">
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-                        </svg>
-                        <span>Has number</span>
-                      </div>
-                    )}
-
-                    {/* Power Word Indicator */}
-                    {title.hasPowerWord && (
-                      <div className="flex items-center gap-1.5 text-xs text-cyan-400">
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                        <span>Power word</span>
-                      </div>
+                    ) : (
+                      <div className="check-empty" />
                     )}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
 
-          {/* Generate More Button */}
+          {/* Generate More */}
           <button
             onClick={handleGenerateMore}
             disabled={isGeneratingTitles}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-slate-700 text-slate-400 hover:border-cyan-500/50 hover:text-cyan-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="generate-more-btn"
           >
             {isGeneratingTitles ? (
-              <>
-                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                <span>Generating...</span>
-              </>
+              <span className="spinner-small" />
             ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span>Generate More Titles</span>
-              </>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
             )}
+            <span>Generate More</span>
           </button>
-        </>
+        </div>
       )}
 
-      {/* Tips Panel */}
-      <div className="mt-8 p-4 rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-800/30 border border-slate-700/50">
-        <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center flex-shrink-0">
-            <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-          </div>
-          <div>
-            <h4 className="text-sm font-semibold text-white mb-1">Title Best Practices</h4>
-            <ul className="text-xs text-slate-400 space-y-1">
-              <li className="flex items-center gap-2">
-                <span className="w-1 h-1 rounded-full bg-emerald-400" />
-                <span><strong className="text-emerald-400">50-60 chars</strong> is ideal for YouTube</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1 h-1 rounded-full bg-purple-400" />
-                <span><strong className="text-purple-400">Numbers</strong> increase click-through rate</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1 h-1 rounded-full bg-cyan-400" />
-                <span><strong className="text-cyan-400">Power words</strong> trigger emotional response</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      <style jsx>{`
+        .titles-step {
+          padding: 8px 0;
+        }
+
+        /* Context Panel */
+        .context-panel {
+          margin-bottom: 24px;
+          padding: 16px 20px;
+          background: var(--bg-surface);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+        }
+
+        .context-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 12px;
+        }
+
+        .context-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--node-trigger);
+        }
+
+        .context-label {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .context-items {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .context-item {
+          font-size: 13px;
+          color: var(--text-secondary);
+          margin: 0;
+          padding-left: 14px;
+          border-left: 2px solid var(--border-bright);
+          line-height: 1.5;
+        }
+
+        .context-more {
+          font-size: 12px;
+          color: var(--text-muted);
+          padding-left: 14px;
+        }
+
+        /* Empty State */
+        .empty-state {
+          display: flex;
+          justify-content: center;
+          padding: 48px 24px;
+        }
+
+        .empty-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          max-width: 400px;
+        }
+
+        .empty-icon-row {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          margin-bottom: 24px;
+          width: 100%;
+          justify-content: center;
+        }
+
+        .empty-icon {
+          width: 48px;
+          height: 48px;
+          border-radius: var(--radius-lg);
+          background: linear-gradient(135deg, var(--node-trigger), #0891b2);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .empty-icon svg {
+          width: 24px;
+          height: 24px;
+          color: white;
+        }
+
+        .empty-line {
+          flex: 1;
+          height: 1px;
+          background: linear-gradient(90deg, var(--node-trigger), transparent);
+          max-width: 80px;
+        }
+
+        .empty-badge {
+          padding: 6px 12px;
+          background: var(--bg-surface);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-full);
+          font-size: 12px;
+          font-weight: 500;
+          color: var(--text-muted);
+        }
+
+        .empty-title {
+          font-size: 24px;
+          font-weight: 700;
+          color: var(--text-primary);
+          margin: 0 0 8px 0;
+          letter-spacing: -0.5px;
+        }
+
+        .empty-desc {
+          font-size: 14px;
+          color: var(--text-secondary);
+          margin: 0 0 28px 0;
+          line-height: 1.6;
+        }
+
+        .generate-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          padding: 14px 28px;
+          background: linear-gradient(135deg, var(--node-trigger), #0891b2);
+          border: none;
+          border-radius: var(--radius-lg);
+          font-size: 15px;
+          font-weight: 600;
+          color: white;
+          cursor: pointer;
+          transition: all 0.2s;
+          box-shadow: 0 4px 24px rgba(6, 182, 212, 0.3);
+        }
+
+        .generate-btn:not(:disabled):hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 32px rgba(6, 182, 212, 0.4);
+        }
+
+        .generate-btn:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+        }
+
+        .generate-btn svg {
+          width: 18px;
+          height: 18px;
+        }
+
+        .empty-hints {
+          display: flex;
+          gap: 20px;
+          margin-top: 32px;
+        }
+
+        .hint {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+
+        .hint-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+        }
+
+        .hint-dot-green { background: #22c55e; }
+        .hint-dot-purple { background: #a855f7; }
+        .hint-dot-cyan { background: #06b6d4; }
+
+        /* Loading */
+        .loading-overlay {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(10, 10, 12, 0.8);
+          backdrop-filter: blur(4px);
+          z-index: 10;
+        }
+
+        .loading-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .loading-bars {
+          display: flex;
+          align-items: flex-end;
+          gap: 4px;
+          height: 32px;
+        }
+
+        .bar {
+          width: 4px;
+          background: var(--node-trigger);
+          border-radius: 2px;
+          animation: bars 1s ease-in-out infinite;
+        }
+
+        .bar-1 { height: 12px; animation-delay: 0s; }
+        .bar-2 { height: 20px; animation-delay: 0.2s; }
+        .bar-3 { height: 16px; animation-delay: 0.4s; }
+
+        @keyframes bars {
+          0%, 100% { transform: scaleY(1); }
+          50% { transform: scaleY(1.5); }
+        }
+
+        .loading-text {
+          font-size: 13px;
+          color: var(--text-muted);
+        }
+
+        .spinner {
+          width: 18px;
+          height: 18px;
+          border: 2px solid rgba(255, 255, 255, 0.3);
+          border-top-color: white;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+
+        .spinner-small {
+          width: 14px;
+          height: 14px;
+          border: 2px solid var(--border-bright);
+          border-top-color: var(--node-trigger);
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
+        /* Titles Section */
+        .titles-section {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .titles-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .titles-count {
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--text-muted);
+        }
+
+        .selection-badge {
+          padding: 4px 10px;
+          background: var(--node-trigger);
+          border-radius: var(--radius-full);
+          font-size: 11px;
+          font-weight: 600;
+          color: white;
+        }
+
+        .titles-grid {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .title-card {
+          display: flex;
+          align-items: flex-start;
+          gap: 16px;
+          padding: 16px 20px;
+          background: var(--bg-surface);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+          cursor: pointer;
+          transition: all 0.15s;
+          text-align: left;
+          animation: fadeIn 0.3s ease-out both;
+        }
+
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .title-card:hover {
+          background: var(--bg-elevated);
+          border-color: var(--border-bright);
+        }
+
+        .title-card.selected {
+          background: rgba(6, 182, 212, 0.08);
+          border-color: var(--node-trigger);
+        }
+
+        .title-content {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .title-text {
+          font-size: 15px;
+          font-weight: 500;
+          color: var(--text-primary);
+          line-height: 1.5;
+          margin: 0 0 10px 0;
+        }
+
+        .title-meta {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .char-badge {
+          padding: 3px 8px;
+          border-radius: var(--radius-sm);
+          font-size: 11px;
+          font-weight: 600;
+        }
+
+        .feature-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 3px 8px;
+          background: rgba(168, 85, 247, 0.15);
+          border-radius: var(--radius-sm);
+          font-size: 11px;
+          font-weight: 500;
+          color: #a855f7;
+        }
+
+        .feature-badge-cyan {
+          background: rgba(6, 182, 212, 0.15);
+          color: #06b6d4;
+        }
+
+        .feature-badge svg {
+          width: 12px;
+          height: 12px;
+        }
+
+        .title-check {
+          width: 24px;
+          height: 24px;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .title-card.selected .title-check {
+          background: var(--node-trigger);
+          border-radius: var(--radius-sm);
+          color: white;
+        }
+
+        .title-check svg {
+          width: 14px;
+          height: 14px;
+        }
+
+        .check-empty {
+          width: 20px;
+          height: 20px;
+          border: 2px solid var(--border);
+          border-radius: var(--radius-sm);
+          transition: border-color 0.15s;
+        }
+
+        .title-card:hover .check-empty {
+          border-color: var(--border-bright);
+        }
+
+        .generate-more-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 14px;
+          background: transparent;
+          border: 1px dashed var(--border);
+          border-radius: var(--radius-lg);
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--text-muted);
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+
+        .generate-more-btn:not(:disabled):hover {
+          border-color: var(--node-trigger);
+          color: var(--node-trigger);
+          background: rgba(6, 182, 212, 0.05);
+        }
+
+        .generate-more-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .generate-more-btn svg {
+          width: 16px;
+          height: 16px;
+        }
+      `}</style>
     </div>
   );
 }

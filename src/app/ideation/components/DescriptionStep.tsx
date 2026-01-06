@@ -5,46 +5,6 @@ import { useCallback, useMemo, useRef } from 'react';
 
 const YOUTUBE_DESCRIPTION_LIMIT = 5000;
 
-interface FormatHint {
-  icon: React.ReactNode;
-  label: string;
-  description: string;
-  color: string;
-}
-
-const FORMAT_HINTS: FormatHint[] = [
-  {
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-    label: 'Timestamps',
-    description: 'Chapter markers for easy navigation',
-    color: 'text-emerald-400',
-  },
-  {
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-      </svg>
-    ),
-    label: 'Links',
-    description: 'Resources and references mentioned',
-    color: 'text-blue-400',
-  },
-  {
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-      </svg>
-    ),
-    label: 'Call to Action',
-    description: 'Subscribe, like, and engagement prompts',
-    color: 'text-amber-400',
-  },
-];
-
 export function DescriptionStep() {
   const {
     generatedDescription,
@@ -76,198 +36,575 @@ export function DescriptionStep() {
 
   const charCount = editedDescription?.length || 0;
   const charPercentage = Math.min((charCount / YOUTUBE_DESCRIPTION_LIMIT) * 100, 100);
+  const hasContent = !!(generatedDescription || editedDescription);
+  const isModified = editedDescription !== generatedDescription;
 
-  const getCharCountColor = () => {
-    if (charCount < 500) return 'text-slate-400';
-    if (charCount < 2000) return 'text-emerald-400';
-    if (charCount < 4000) return 'text-amber-400';
-    if (charCount < YOUTUBE_DESCRIPTION_LIMIT) return 'text-orange-400';
-    return 'text-red-400';
+  const getCharStatus = () => {
+    if (charCount < 500) return { color: 'var(--text-muted)', label: 'Short', bg: 'var(--bg-elevated)' };
+    if (charCount < 2000) return { color: '#22c55e', label: 'Good', bg: 'rgba(34, 197, 94, 0.15)' };
+    if (charCount < 4000) return { color: '#f59e0b', label: 'Long', bg: 'rgba(245, 158, 11, 0.15)' };
+    return { color: '#ef4444', label: 'Near limit', bg: 'rgba(239, 68, 68, 0.15)' };
   };
 
-  const getProgressColor = () => {
-    if (charCount < 2000) return 'bg-emerald-500';
-    if (charCount < 4000) return 'bg-amber-500';
-    return 'bg-red-500';
-  };
+  const status = getCharStatus();
 
   return (
     <div className="description-step">
-      {/* Header Section */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-            </svg>
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">Generate Description</h2>
-            <p className="text-sm text-slate-400">Create an optimized video description</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Context Panel */}
+      {/* Context - Selected Title */}
       {selectedTitle && (
-        <div className="mb-6 p-4 rounded-xl bg-slate-800/50 border border-slate-700/50 backdrop-blur">
-          <div className="flex items-center gap-2 mb-2">
-            <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-            </svg>
-            <span className="text-sm font-medium text-slate-300">For your video:</span>
+        <div className="context-panel">
+          <div className="context-header">
+            <span className="context-dot" />
+            <span className="context-label">For your video</span>
           </div>
-          <p className="text-white font-medium pl-4 border-l-2 border-amber-500/30">
-            {selectedTitle.content}
-          </p>
+          <p className="context-title">{selectedTitle.content}</p>
         </div>
       )}
 
-      {/* Generate Button (when no description yet) */}
-      {!generatedDescription && !editedDescription && (
-        <button
-          onClick={handleGenerate}
-          disabled={isGeneratingDescription}
-          className="w-full group relative overflow-hidden rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 p-px mb-8 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <div className="relative flex items-center justify-center gap-3 px-6 py-4 bg-slate-900/90 rounded-[11px] group-hover:bg-slate-900/70 transition-colors">
-            {isGeneratingDescription ? (
-              <>
-                <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                <span className="text-amber-400 font-semibold">Generating Description...</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+      {/* Empty State / Generate */}
+      {!hasContent && !isGeneratingDescription && (
+        <div className="empty-state">
+          <div className="empty-content">
+            <div className="empty-icon-row">
+              <div className="empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M4 6h16M4 12h16M4 18h10" />
                 </svg>
-                <span className="text-amber-400 font-semibold">Generate Description</span>
-              </>
-            )}
+              </div>
+              <div className="empty-line" />
+              <div className="empty-badge">SEO optimized</div>
+            </div>
+
+            <h3 className="empty-title">Generate Description</h3>
+            <p className="empty-desc">
+              Create an engaging, SEO-optimized description with timestamps, links, and CTAs
+            </p>
+
+            <button
+              onClick={handleGenerate}
+              disabled={isGeneratingDescription}
+              className="generate-btn"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+              </svg>
+              <span>Generate Description</span>
+            </button>
+
+            <div className="empty-features">
+              <div className="feature">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 6v6l4 2" />
+                </svg>
+                <span>Timestamps</span>
+              </div>
+              <div className="feature">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </svg>
+                <span>Links</span>
+              </div>
+              <div className="feature">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                <span>CTAs</span>
+              </div>
+            </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* Loading State */}
-      {isGeneratingDescription && !editedDescription && (
-        <div className="flex flex-col items-center justify-center py-16">
-          <div className="relative w-16 h-16 mb-4">
-            <div className="absolute inset-0 rounded-full border-4 border-slate-700" />
-            <div className="absolute inset-0 rounded-full border-4 border-amber-500 border-t-transparent animate-spin" />
-            <div className="absolute inset-2 rounded-full border-4 border-amber-400/30 border-t-transparent animate-spin" style={{ animationDuration: '1.5s' }} />
+      {isGeneratingDescription && !hasContent && (
+        <div className="loading-state">
+          <div className="loading-content">
+            <div className="loading-icon">
+              <div className="loading-ring" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M4 6h16M4 12h16M4 18h10" />
+              </svg>
+            </div>
+            <span className="loading-text">Writing your description...</span>
           </div>
-          <p className="text-slate-400 animate-pulse">Crafting your description...</p>
         </div>
       )}
 
       {/* Description Editor */}
-      {(generatedDescription || editedDescription) && (
-        <div className="space-y-4">
-          {/* Format Hints */}
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            {FORMAT_HINTS.map((hint) => (
-              <div
-                key={hint.label}
-                className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/50"
-              >
-                <div className={`flex items-center gap-2 mb-1 ${hint.color}`}>
-                  {hint.icon}
-                  <span className="text-sm font-medium">{hint.label}</span>
-                </div>
-                <p className="text-xs text-slate-500">{hint.description}</p>
-              </div>
-            ))}
+      {hasContent && (
+        <div className="editor-section">
+          {/* Editor Header */}
+          <div className="editor-header">
+            <div className="editor-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M4 6h16M4 12h16M4 18h10" />
+              </svg>
+              <span>Description</span>
+              {isModified && <span className="modified-badge">Modified</span>}
+            </div>
+            <button
+              onClick={handleRegenerate}
+              disabled={isGeneratingDescription}
+              className="regenerate-btn"
+            >
+              {isGeneratingDescription ? (
+                <span className="spinner-small" />
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M23 4v6h-6M1 20v-6h6" />
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                </svg>
+              )}
+              <span>Regenerate</span>
+            </button>
           </div>
 
           {/* Textarea */}
-          <div className="relative">
+          <div className="textarea-wrapper">
             <textarea
               ref={textareaRef}
               value={editedDescription || ''}
               onChange={handleDescriptionChange}
               placeholder="Your video description will appear here..."
-              className="w-full h-80 bg-slate-800/50 text-white font-mono text-sm rounded-xl px-4 py-4 border-2 border-slate-700/50 focus:border-amber-500/50 focus:ring-0 resize-none transition-colors placeholder:text-slate-600"
-              style={{ lineHeight: '1.6' }}
+              className="editor-textarea"
             />
+          </div>
 
-            {/* Character Count Overlay */}
-            <div className="absolute bottom-3 right-3 flex items-center gap-2">
-              <span className={`text-xs font-mono ${getCharCountColor()}`}>
-                {charCount.toLocaleString()} / {YOUTUBE_DESCRIPTION_LIMIT.toLocaleString()}
+          {/* Character Count Bar */}
+          <div className="char-section">
+            <div className="char-bar">
+              <div
+                className="char-fill"
+                style={{
+                  width: `${charPercentage}%`,
+                  background: status.color
+                }}
+              />
+            </div>
+            <div className="char-info">
+              <span className="char-count" style={{ color: status.color }}>
+                {charCount.toLocaleString()}
+              </span>
+              <span className="char-divider">/</span>
+              <span className="char-limit">{YOUTUBE_DESCRIPTION_LIMIT.toLocaleString()}</span>
+              <span className="char-label" style={{ background: status.bg, color: status.color }}>
+                {status.label}
               </span>
             </div>
           </div>
 
-          {/* Progress Bar */}
-          <div className="relative h-1.5 bg-slate-700 rounded-full overflow-hidden">
-            <div
-              className={`absolute inset-y-0 left-0 ${getProgressColor()} transition-all duration-300`}
-              style={{ width: `${charPercentage}%` }}
-            />
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleRegenerate}
-              disabled={isGeneratingDescription}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:border-amber-500/50 hover:text-amber-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isGeneratingDescription ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  <span className="text-sm">Regenerating...</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  <span className="text-sm">Regenerate</span>
-                </>
-              )}
-            </button>
-
-            <div className="flex-1" />
-
-            {/* Status Indicator */}
-            {editedDescription !== generatedDescription && (
-              <div className="flex items-center gap-2 text-xs text-amber-400">
-                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                <span>Modified</span>
-              </div>
-            )}
+          {/* Tips */}
+          <div className="tips-row">
+            <div className="tip">
+              <span className="tip-dot" style={{ background: '#22c55e' }} />
+              <span>First 200 chars appear in search</span>
+            </div>
+            <div className="tip">
+              <span className="tip-dot" style={{ background: '#3b82f6' }} />
+              <span>Include keywords naturally</span>
+            </div>
+            <div className="tip">
+              <span className="tip-dot" style={{ background: '#f59e0b' }} />
+              <span>Add timestamps for chapters</span>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Tips Panel */}
-      <div className="mt-8 p-4 rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-800/30 border border-slate-700/50">
-        <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
-            <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-          </div>
-          <div>
-            <h4 className="text-sm font-semibold text-white mb-1">Description Best Practices</h4>
-            <ul className="text-xs text-slate-400 space-y-1">
-              <li className="flex items-center gap-2">
-                <span className="w-1 h-1 rounded-full bg-emerald-400" />
-                <span>First <strong className="text-emerald-400">200 characters</strong> appear in search results</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1 h-1 rounded-full bg-blue-400" />
-                <span>Include <strong className="text-blue-400">keywords</strong> naturally for SEO</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1 h-1 rounded-full bg-amber-400" />
-                <span>Add <strong className="text-amber-400">timestamps</strong> for better engagement</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      <style jsx>{`
+        .description-step {
+          padding: 8px 0;
+        }
+
+        /* Context Panel */
+        .context-panel {
+          margin-bottom: 24px;
+          padding: 16px 20px;
+          background: var(--bg-surface);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+        }
+
+        .context-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+
+        .context-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--node-voice);
+        }
+
+        .context-label {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .context-title {
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--text-primary);
+          margin: 0;
+          padding-left: 14px;
+          border-left: 2px solid var(--node-voice);
+          line-height: 1.5;
+        }
+
+        /* Empty State */
+        .empty-state {
+          display: flex;
+          justify-content: center;
+          padding: 48px 24px;
+        }
+
+        .empty-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          max-width: 400px;
+        }
+
+        .empty-icon-row {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          margin-bottom: 24px;
+          width: 100%;
+          justify-content: center;
+        }
+
+        .empty-icon {
+          width: 48px;
+          height: 48px;
+          border-radius: var(--radius-lg);
+          background: linear-gradient(135deg, var(--node-voice), #d97706);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .empty-icon svg {
+          width: 24px;
+          height: 24px;
+          color: white;
+        }
+
+        .empty-line {
+          flex: 1;
+          height: 1px;
+          background: linear-gradient(90deg, var(--node-voice), transparent);
+          max-width: 80px;
+        }
+
+        .empty-badge {
+          padding: 6px 12px;
+          background: var(--bg-surface);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-full);
+          font-size: 12px;
+          font-weight: 500;
+          color: var(--text-muted);
+        }
+
+        .empty-title {
+          font-size: 24px;
+          font-weight: 700;
+          color: var(--text-primary);
+          margin: 0 0 8px 0;
+          letter-spacing: -0.5px;
+        }
+
+        .empty-desc {
+          font-size: 14px;
+          color: var(--text-secondary);
+          margin: 0 0 28px 0;
+          line-height: 1.6;
+        }
+
+        .generate-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          padding: 14px 28px;
+          background: linear-gradient(135deg, var(--node-voice), #d97706);
+          border: none;
+          border-radius: var(--radius-lg);
+          font-size: 15px;
+          font-weight: 600;
+          color: white;
+          cursor: pointer;
+          transition: all 0.2s;
+          box-shadow: 0 4px 24px rgba(245, 158, 11, 0.3);
+        }
+
+        .generate-btn:not(:disabled):hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 32px rgba(245, 158, 11, 0.4);
+        }
+
+        .generate-btn:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+        }
+
+        .generate-btn svg {
+          width: 18px;
+          height: 18px;
+        }
+
+        .empty-features {
+          display: flex;
+          gap: 24px;
+          margin-top: 32px;
+        }
+
+        .feature {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          color: var(--text-muted);
+        }
+
+        .feature svg {
+          width: 16px;
+          height: 16px;
+          color: var(--node-voice);
+        }
+
+        /* Loading State */
+        .loading-state {
+          display: flex;
+          justify-content: center;
+          padding: 64px 24px;
+        }
+
+        .loading-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 20px;
+        }
+
+        .loading-icon {
+          position: relative;
+          width: 64px;
+          height: 64px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .loading-ring {
+          position: absolute;
+          inset: 0;
+          border: 2px solid var(--border);
+          border-top-color: var(--node-voice);
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+
+        .loading-icon svg {
+          width: 28px;
+          height: 28px;
+          color: var(--node-voice);
+        }
+
+        .loading-text {
+          font-size: 14px;
+          color: var(--text-muted);
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
+        /* Editor Section */
+        .editor-section {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .editor-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .editor-title {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+
+        .editor-title svg {
+          width: 18px;
+          height: 18px;
+          color: var(--node-voice);
+        }
+
+        .modified-badge {
+          padding: 3px 8px;
+          background: rgba(245, 158, 11, 0.15);
+          border-radius: var(--radius-sm);
+          font-size: 11px;
+          font-weight: 500;
+          color: var(--node-voice);
+        }
+
+        .regenerate-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 14px;
+          background: var(--bg-surface);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-md);
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+
+        .regenerate-btn:not(:disabled):hover {
+          background: var(--bg-elevated);
+          border-color: var(--node-voice);
+          color: var(--node-voice);
+        }
+
+        .regenerate-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .regenerate-btn svg {
+          width: 14px;
+          height: 14px;
+        }
+
+        .spinner-small {
+          width: 14px;
+          height: 14px;
+          border: 2px solid var(--border);
+          border-top-color: var(--node-voice);
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+
+        .textarea-wrapper {
+          position: relative;
+        }
+
+        .editor-textarea {
+          width: 100%;
+          height: 280px;
+          padding: 16px;
+          background: var(--bg-surface);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+          font-family: 'SF Mono', 'Fira Code', monospace;
+          font-size: 13px;
+          line-height: 1.7;
+          color: var(--text-primary);
+          resize: none;
+          outline: none;
+          transition: border-color 0.15s;
+        }
+
+        .editor-textarea::placeholder {
+          color: var(--text-muted);
+        }
+
+        .editor-textarea:focus {
+          border-color: var(--node-voice);
+        }
+
+        .char-section {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .char-bar {
+          flex: 1;
+          height: 3px;
+          background: var(--bg-elevated);
+          border-radius: 2px;
+          overflow: hidden;
+        }
+
+        .char-fill {
+          height: 100%;
+          border-radius: 2px;
+          transition: width 0.3s, background 0.3s;
+        }
+
+        .char-info {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 12px;
+          flex-shrink: 0;
+        }
+
+        .char-count {
+          font-weight: 600;
+          font-family: 'SF Mono', monospace;
+        }
+
+        .char-divider {
+          color: var(--text-muted);
+        }
+
+        .char-limit {
+          color: var(--text-muted);
+          font-family: 'SF Mono', monospace;
+        }
+
+        .char-label {
+          margin-left: 8px;
+          padding: 2px 8px;
+          border-radius: var(--radius-sm);
+          font-size: 11px;
+          font-weight: 600;
+        }
+
+        .tips-row {
+          display: flex;
+          gap: 20px;
+          padding-top: 8px;
+        }
+
+        .tip {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+
+        .tip-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+        }
+      `}</style>
     </div>
   );
 }
