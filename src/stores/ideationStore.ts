@@ -560,7 +560,9 @@ export const useIdeationStore = create<IdeationStore>()(
             return selectedHookIds.length > 0;
           case 2: // Titles step
             return selectedTitleIds.length > 0;
-          case 3: // Description step - always can proceed (summary step)
+          case 3: // Description step
+            return true; // Can always proceed to Summary
+          case 4: // Summary step (final)
             return true;
           default:
             return false;
