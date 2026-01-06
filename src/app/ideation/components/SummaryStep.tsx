@@ -34,8 +34,6 @@ export function SummaryStep() {
     generatedTitles,
     selectedTitleIds,
     editedDescription,
-    thumbnailConcepts,
-    selectedThumbnailConcept,
     saveSelectedToLibrary,
     reset,
     goToStep,
@@ -112,7 +110,6 @@ export function SummaryStep() {
       hooks: selectedHooks.map((h) => h.content),
       titles: selectedTitles.map((t) => t.content),
       description: editedDescription,
-      thumbnailConcept: selectedThumbnailConcept,
       topic,
       archetype,
     };
@@ -147,8 +144,7 @@ export function SummaryStep() {
   const totalItems =
     selectedHooks.length +
     selectedTitles.length +
-    (editedDescription ? 1 : 0) +
-    (selectedThumbnailConcept ? 1 : 0);
+    (editedDescription ? 1 : 0);
 
   return (
     <div className="summary-step">
@@ -310,39 +306,6 @@ export function SummaryStep() {
           </div>
         )}
 
-        {/* Thumbnail Concepts Card */}
-        {(thumbnailConcepts.length > 0 || selectedThumbnailConcept) && (
-          <div className="summary-card thumbnail-card">
-            <div className="card-header">
-              <div className="card-icon thumbnail">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <polyline points="21 15 16 10 5 21" />
-                </svg>
-              </div>
-              <h3 className="card-title">Thumbnail Concepts</h3>
-              <span className="card-count">{thumbnailConcepts.length}</span>
-            </div>
-            <div className="card-content">
-              <div className="thumbnail-concepts">
-                {thumbnailConcepts.map((concept, index) => (
-                  <div
-                    key={index}
-                    className={`concept-chip ${concept === selectedThumbnailConcept ? 'selected' : ''}`}
-                  >
-                    {concept === selectedThumbnailConcept && (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                    {concept}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Action Buttons */}
@@ -627,10 +590,6 @@ export function SummaryStep() {
           background: linear-gradient(135deg, var(--node-voice), #d97706);
         }
 
-        .card-icon.thumbnail {
-          background: linear-gradient(135deg, var(--node-thumbnail), #db2777);
-        }
-
         .card-title {
           font-size: 14px;
           font-weight: 600;
@@ -790,42 +749,6 @@ export function SummaryStep() {
           color: var(--text-secondary);
           line-height: 1.7;
           white-space: pre-wrap;
-        }
-
-        /* Thumbnail Concepts */
-        .thumbnail-concepts {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-        }
-
-        .concept-chip {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 10px 16px;
-          background: var(--bg-elevated);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-md);
-          font-size: 13px;
-          color: var(--text-secondary);
-          transition: all 0.2s ease;
-        }
-
-        .concept-chip.selected {
-          background: linear-gradient(
-            135deg,
-            rgba(236, 72, 153, 0.15),
-            rgba(168, 85, 247, 0.15)
-          );
-          border-color: var(--node-thumbnail);
-          color: var(--text-primary);
-        }
-
-        .concept-chip svg {
-          width: 14px;
-          height: 14px;
-          color: var(--status-success);
         }
 
         /* Action Buttons */

@@ -44,10 +44,6 @@ export interface IdeationState {
   editedDescription: string | null;
   isGeneratingDescription: boolean;
 
-  // Step 4: Thumbnail
-  thumbnailConcepts: string[];
-  selectedThumbnailConcept: string | null;
-
   // General
   isLoading: boolean;
   error: string | null;
@@ -77,11 +73,6 @@ export interface IdeationActions {
   // Step 3
   generateDescription: () => Promise<void>;
   setEditedDescription: (description: string) => void;
-
-  // Step 4
-  addThumbnailConcept: (concept: string) => void;
-  removeThumbnailConcept: (concept: string) => void;
-  setSelectedThumbnailConcept: (concept: string | null) => void;
 
   // Save to Content Library
   saveSelectedToLibrary: () => Promise<void>;
@@ -121,10 +112,6 @@ const initialState: IdeationState = {
   editedDescription: null,
   isGeneratingDescription: false,
 
-  // Step 4: Thumbnail
-  thumbnailConcepts: [],
-  selectedThumbnailConcept: null,
-
   // General
   isLoading: false,
   error: null,
@@ -148,7 +135,7 @@ export const useIdeationStore = create<IdeationStore>()(
           ? completedSteps
           : [...completedSteps, currentStep];
 
-        if (currentStep < 4) {
+        if (currentStep < 3) {
           set({
             currentStep: currentStep + 1,
             completedSteps: newCompletedSteps,
@@ -165,7 +152,7 @@ export const useIdeationStore = create<IdeationStore>()(
       },
 
       goToStep: (step: number) => {
-        if (step >= 0 && step <= 4) {
+        if (step >= 0 && step <= 3) {
           set({ currentStep: step, error: null });
         }
       },
@@ -463,28 +450,6 @@ export const useIdeationStore = create<IdeationStore>()(
         set({ editedDescription: description });
       },
 
-      // === Step 4: Thumbnail Actions ===
-
-      addThumbnailConcept: (concept: string) => {
-        const { thumbnailConcepts } = get();
-        if (!thumbnailConcepts.includes(concept)) {
-          set({ thumbnailConcepts: [...thumbnailConcepts, concept] });
-        }
-      },
-
-      removeThumbnailConcept: (concept: string) => {
-        const { thumbnailConcepts, selectedThumbnailConcept } = get();
-        set({
-          thumbnailConcepts: thumbnailConcepts.filter((c) => c !== concept),
-          selectedThumbnailConcept:
-            selectedThumbnailConcept === concept ? null : selectedThumbnailConcept,
-        });
-      },
-
-      setSelectedThumbnailConcept: (concept: string | null) => {
-        set({ selectedThumbnailConcept: concept });
-      },
-
       // === Save to Content Library ===
 
       saveSelectedToLibrary: async () => {
@@ -496,14 +461,13 @@ export const useIdeationStore = create<IdeationStore>()(
           selectedTitleIds,
           generatedTitles,
           editedDescription,
-          selectedThumbnailConcept,
         } = get();
 
         set({ isLoading: true, error: null });
 
         try {
           const items: Array<{
-            type: 'hook' | 'title' | 'description' | 'thumbnail_concept';
+            type: 'hook' | 'title' | 'description';
             content: string;
             metadata?: Record<string, unknown>;
           }> = [];
@@ -543,15 +507,6 @@ export const useIdeationStore = create<IdeationStore>()(
             items.push({
               type: 'description',
               content: editedDescription,
-              metadata: { topic, archetype },
-            });
-          }
-
-          // Add thumbnail concept if selected
-          if (selectedThumbnailConcept) {
-            items.push({
-              type: 'thumbnail_concept',
-              content: selectedThumbnailConcept,
               metadata: { topic, archetype },
             });
           }
@@ -605,12 +560,7 @@ export const useIdeationStore = create<IdeationStore>()(
             return selectedHookIds.length > 0;
           case 2: // Titles step
             return selectedTitleIds.length > 0;
-          case 3: // Description step
-            return (
-              generatedDescription !== null ||
-              (editedDescription !== null && editedDescription.trim().length > 0)
-            );
-          case 4: // Thumbnail step (optional)
+          case 3: // Description step - always can proceed (summary step)
             return true;
           default:
             return false;

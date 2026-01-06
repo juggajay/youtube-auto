@@ -9,7 +9,6 @@ export { TopicStep } from './TopicStep';
 export { HooksStep } from './HooksStep';
 export { TitlesStep } from './TitlesStep';
 export { DescriptionStep } from './DescriptionStep';
-export { ThumbnailStep } from './ThumbnailStep';
 export { SummaryStep } from './SummaryStep';
 
 // Wizard Navigation

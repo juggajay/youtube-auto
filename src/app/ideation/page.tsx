@@ -8,9 +8,9 @@ import { TopicStep } from './components/TopicStep';
 import { HooksStep } from './components/HooksStep';
 import { TitlesStep } from './components/TitlesStep';
 import { DescriptionStep } from './components/DescriptionStep';
-import { ThumbnailStep } from './components/ThumbnailStep';
+import { SummaryStep } from './components/SummaryStep';
 
-const STEP_LABELS = ['Topic', 'Hooks', 'Titles', 'Description', 'Thumbnail'];
+const STEP_LABELS = ['Topic', 'Hooks', 'Titles', 'Description', 'Summary'];
 
 export default function IdeationPage() {
   const {
@@ -51,7 +51,7 @@ export default function IdeationPage() {
       case 3:
         return <DescriptionStep />;
       case 4:
-        return <ThumbnailStep />;
+        return <SummaryStep />;
       default:
         return null;
     }
@@ -59,11 +59,11 @@ export default function IdeationPage() {
 
   const getNextButtonText = () => {
     if (currentStep === 0) return 'Continue';
-    if (currentStep === 4) return 'Finish';
+    if (currentStep === 3) return 'Finish';
     return 'Next';
   };
 
-  const canSkip = currentStep > 0 && currentStep < 4;
+  const canSkip = currentStep > 0 && currentStep < 3;
 
   return (
     <div className="app">
