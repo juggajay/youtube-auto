@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { TriggerNode } from '../index';
+import { TriggerNode, TriggerConfigSchema } from '../index';
 import { createInitialRunContext } from '@/lib/nodes/context';
 
 describe('TriggerNode', () => {
   const node = new TriggerNode();
+  const defaultConfig = TriggerConfigSchema.parse({});
 
   it('has correct metadata', () => {
     expect(node.meta.id).toBe('trigger');
@@ -14,7 +15,7 @@ describe('TriggerNode', () => {
     const context = createInitialRunContext({ userId: 'user', projectId: 'project' });
     const result = node.validate(
       { topic: 'Test Topic', archetypeId: 'explainer', sourceType: 'manual' },
-      {},
+      defaultConfig,
       context
     );
     expect(result.valid).toBe(true);
@@ -24,7 +25,7 @@ describe('TriggerNode', () => {
     const context = createInitialRunContext({ userId: 'user', projectId: 'project' });
     const result = node.validate(
       { topic: 'Hi', archetypeId: 'explainer', sourceType: 'manual' },
-      {},
+      defaultConfig,
       context
     );
     expect(result.warnings.length).toBeGreaterThan(0);
@@ -34,7 +35,7 @@ describe('TriggerNode', () => {
     const context = createInitialRunContext({ userId: 'user', projectId: 'project' });
     const result = await node.execute(
       { topic: 'Test Topic', archetypeId: 'explainer', sourceType: 'manual' },
-      {},
+      defaultConfig,
       context
     );
 
@@ -48,7 +49,7 @@ describe('TriggerNode', () => {
   it('estimates zero cost (no API calls)', () => {
     const estimate = node.estimateCost(
       { topic: 'Test', archetypeId: 'explainer', sourceType: 'manual' },
-      {}
+      defaultConfig
     );
     expect(estimate.total).toBe(0);
   });

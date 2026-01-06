@@ -398,11 +398,10 @@ describe('AssemblyNode', () => {
   });
 
   describe('getInputFromContext', () => {
-    it('extracts input from context with script and voice', async () => {
-      const context = await createInitialRunContext({
-        channelId: 'test-channel',
-        runId: 'run-123',
-        config: {},
+    it('extracts input from context with script and voice', () => {
+      const context = createInitialRunContext({
+        userId: 'test-user',
+        projectId: 'test-project',
       });
 
       context.previousOutputs.script = {
@@ -412,6 +411,9 @@ describe('AssemblyNode', () => {
           { id: 'sec_1', name: 'Section 1', script: 'Content', visualNotes: '', bRollSuggestions: [], durationEstimate: 20 },
         ],
         outro: { text: 'Outro', cta: 'Subscribe' },
+        metadata: { descriptionDraft: '', tags: [], chapters: [] },
+        totalDurationEstimate: 25,
+        wordCount: 50,
       };
 
       context.previousOutputs.voice = {
@@ -419,6 +421,7 @@ describe('AssemblyNode', () => {
           { id: 'hook', file: '/audio/hook.mp3', duration: 5, text: 'Hook text' },
           { id: 'sec_1', file: '/audio/sec_1.mp3', duration: 20, text: 'Content' },
         ],
+        totalDuration: 25,
       };
 
       const input = node.getInputFromContext(context);
@@ -428,11 +431,10 @@ describe('AssemblyNode', () => {
       expect(input.audioSegments[0].id).toBe('hook');
     });
 
-    it('includes thumbnail if available', async () => {
-      const context = await createInitialRunContext({
-        channelId: 'test-channel',
-        runId: 'run-123',
-        config: {},
+    it('includes thumbnail if available', () => {
+      const context = createInitialRunContext({
+        userId: 'test-user',
+        projectId: 'test-project',
       });
 
       context.previousOutputs.script = {
@@ -440,8 +442,11 @@ describe('AssemblyNode', () => {
         hook: { text: '', visualNotes: '', durationEstimate: 5 },
         sections: [],
         outro: { text: '', cta: '' },
+        metadata: { descriptionDraft: '', tags: [], chapters: [] },
+        totalDurationEstimate: 5,
+        wordCount: 0,
       };
-      context.previousOutputs.voice = { segments: [] };
+      context.previousOutputs.voice = { segments: [], totalDuration: 0 };
       context.previousOutputs.thumbnail = {
         selected: 'https://example.com/thumb.png',
         options: [{ file: 'https://example.com/thumb.png' }],
@@ -451,21 +456,19 @@ describe('AssemblyNode', () => {
       expect(input.thumbnail?.imageUrl).toBe('https://example.com/thumb.png');
     });
 
-    it('throws if script is missing', async () => {
-      const context = await createInitialRunContext({
-        channelId: 'test-channel',
-        runId: 'run-123',
-        config: {},
+    it('throws if script is missing', () => {
+      const context = createInitialRunContext({
+        userId: 'test-user',
+        projectId: 'test-project',
       });
 
       expect(() => node.getInputFromContext(context)).toThrow('Script output not found');
     });
 
-    it('throws if voice is missing', async () => {
-      const context = await createInitialRunContext({
-        channelId: 'test-channel',
-        runId: 'run-123',
-        config: {},
+    it('throws if voice is missing', () => {
+      const context = createInitialRunContext({
+        userId: 'test-user',
+        projectId: 'test-project',
       });
 
       context.previousOutputs.script = {
@@ -473,6 +476,9 @@ describe('AssemblyNode', () => {
         hook: { text: '', visualNotes: '', durationEstimate: 5 },
         sections: [],
         outro: { text: '', cta: '' },
+        metadata: { descriptionDraft: '', tags: [], chapters: [] },
+        totalDurationEstimate: 5,
+        wordCount: 0,
       };
 
       expect(() => node.getInputFromContext(context)).toThrow('Voice output not found');
@@ -889,10 +895,9 @@ describe('Validation', () => {
   };
 
   it('validates correct input', async () => {
-    const context = await createInitialRunContext({
-      channelId: 'ch',
-      runId: 'run',
-      config: {},
+    const context = createInitialRunContext({
+      userId: 'test-user',
+      projectId: 'test-project',
     });
 
     const config = AssemblyConfigSchema.parse({});
@@ -913,10 +918,9 @@ describe('Validation', () => {
   });
 
   it('warns about missing audio segments', async () => {
-    const context = await createInitialRunContext({
-      channelId: 'ch',
-      runId: 'run',
-      config: {},
+    const context = createInitialRunContext({
+      userId: 'test-user',
+      projectId: 'test-project',
     });
 
     const config = AssemblyConfigSchema.parse({});
@@ -931,10 +935,9 @@ describe('Validation', () => {
   });
 
   it('warns about 4K resolution', async () => {
-    const context = await createInitialRunContext({
-      channelId: 'ch',
-      runId: 'run',
-      config: {},
+    const context = createInitialRunContext({
+      userId: 'test-user',
+      projectId: 'test-project',
     });
 
     const config = AssemblyConfigSchema.parse({ resolution: '4k' });
@@ -945,10 +948,9 @@ describe('Validation', () => {
   });
 
   it('warns about stock footage API requirement', async () => {
-    const context = await createInitialRunContext({
-      channelId: 'ch',
-      runId: 'run',
-      config: {},
+    const context = createInitialRunContext({
+      userId: 'test-user',
+      projectId: 'test-project',
     });
 
     const config = AssemblyConfigSchema.parse({ visualSource: 'stock' });

@@ -325,7 +325,8 @@ describe('ThumbnailGeneratorNode', () => {
     });
 
     it('uses config default count when not in input', () => {
-      const input = { title: 'Test', topic: 'Test' };
+      // Testing runtime behavior where count is intentionally omitted to use config default
+      const input = { title: 'Test', topic: 'Test' } as Parameters<typeof node.estimateCost>[0];
       const config = ThumbnailConfigSchema.parse({ defaultCount: 5 });
 
       const estimate = node.estimateCost(input, config);

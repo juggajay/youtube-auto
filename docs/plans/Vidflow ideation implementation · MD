@@ -1,0 +1,1244 @@
+# VidFlow Ideation Studio & Content Library Implementation
+
+## Overview
+
+Build an Ideation Studio where users brainstorm video content (hooks, titles, descriptions) before running the pipeline. Content is saved to a Content Library and pulled by the Script Node at runtime.
+
+**Pattern:** Same as Thumbnails
+- Ideation Studio = Thumbnail Studio (creation/brainstorming)
+- Content Library = Elements Library (storage/management)
+- Script Node = Thumbnail Node (pulls from library)
+
+**Key Features:**
+1. Ideation Studio — Wizard flow for brainstorming hooks, titles, descriptions
+2. Content Library — Save, tag, and organize text content
+3. @Mention in Script Node — Reference saved content
+4. Script Node Integration — Use saved content or generate fresh
+
+---
+
+## Part 1: Database
+
+### Content Library Table
+
+```sql
+create table content_library (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
+  
+  -- Basic info
+  name text not null,
+  type text not null check (type in ('hook', 'title', 'description', 'intro', 'cta', 'outline', 'script')),
+  content text not null,
+  tags text[] default '{}',
+  
+  -- Context (what video/topic this was created for)
+  topic text,
+  archetype text,
+  
+  -- Metadata
+  metadata jsonb default '{}',
+  
+  -- Usage tracking
+  used_count int default 0,
+  last_used_at timestamp,
+  
+  -- Timestamps
+  created_at timestamp default now(),
+  updated_at timestamp default now()
+);
+
+-- Indexes
+create index idx_content_library_user_id on content_library(user_id);
+create index idx_content_library_user_type on content_library(user_id, type);
+create index idx_content_library_tags on content_library using gin(tags);
+create index idx_content_library_search on content_library using gin(
+  to_tsvector('english', name || ' ' || content || ' ' || coalesce(topic, ''))
+);
+
+-- RLS Policies
+alter table content_library enable row level security;
+
+create policy "Users can view own content"
+  on content_library for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert own content"
+  on content_library for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update own content"
+  on content_library for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete own content"
+  on content_library for delete
+  using (auth.uid() = user_id);
+```
+
+### Content Types Explained
+
+| Type | What It Is | Example |
+|------|-----------|---------|
+| `hook` | Opening line to grab attention | "Everyone's using n8n wrong. Here's why..." |
+| `title` | YouTube video title | "The Ultimate n8n Tutorial for Beginners (2024)" |
+| `description` | Full video description | Multi-line with timestamps, links, CTA |
+| `intro` | Introduction paragraph after hook | "In this video, we'll cover everything you need..." |
+| `cta` | Call-to-action text | "If you found this helpful, smash that like button..." |
+| `outline` | Script structure/sections | "1. Hook 2. Problem 3. Solution 4. Demo 5. CTA" |
+| `script` | Full script (saved for reference) | Complete script text |
+
+---
+
+## Part 2: API Routes
+
+### GET /api/content
+
+List user's content with filtering.
+
+**Query params:**
+- `type` — Filter by type (hook, title, description, intro, cta, outline, script)
+- `tags` — Filter by tags (comma-separated)
+- `search` — Search name, content, and topic
+- `topic` — Filter by topic
+- `limit` — Results per page (default 20)
+- `offset` — Pagination offset
+
+**Response:**
+```json
+{
+  "content": [
+    {
+      "id": "uuid",
+      "name": "n8n Hook - Automation",
+      "type": "hook",
+      "content": "Everyone's using n8n wrong. Here's the one thing...",
+      "tags": ["@n8n", "@automation"],
+      "topic": "n8n beginner tutorial",
+      "createdAt": "2026-01-06T..."
+    }
+  ],
+  "total": 45,
+  "hasMore": true
+}
+```
+
+### POST /api/content
+
+Create new content item.
+
+**Body:**
+```json
+{
+  "name": "n8n Hook - Automation",
+  "type": "hook",
+  "content": "Everyone's using n8n wrong. Here's the one thing...",
+  "tags": ["@n8n", "@automation"],
+  "topic": "n8n beginner tutorial",
+  "archetype": "tutorial",
+  "metadata": {
+    "generated": true,
+    "model": "claude-sonnet-4"
+  }
+}
+```
+
+### POST /api/content/bulk
+
+Create multiple content items at once (for saving multiple hooks/titles).
+
+**Body:**
+```json
+{
+  "items": [
+    {
+      "name": "Hook Option 1",
+      "type": "hook",
+      "content": "...",
+      "tags": ["@n8n"],
+      "topic": "n8n tutorial"
+    },
+    {
+      "name": "Hook Option 2",
+      "type": "hook",
+      "content": "...",
+      "tags": ["@n8n"],
+      "topic": "n8n tutorial"
+    }
+  ]
+}
+```
+
+### GET /api/content/[id]
+
+Get single content item.
+
+### PUT /api/content/[id]
+
+Update content item.
+
+**Body:**
+```json
+{
+  "name": "Updated name",
+  "content": "Updated content...",
+  "tags": ["@n8n", "@updated"]
+}
+```
+
+### DELETE /api/content/[id]
+
+Delete content item.
+
+### POST /api/content/resolve
+
+Resolve @tags to content for pipeline use.
+
+**Body:**
+```json
+{
+  "tags": ["@n8n-hook", "@main-cta"],
+  "type": "hook"  // Optional: filter by type
+}
+```
+
+**Response:**
+```json
+{
+  "resolved": [
+    { "tag": "@n8n-hook", "id": "uuid", "content": "Everyone's using...", "type": "hook" },
+    { "tag": "@main-cta", "id": "uuid", "content": "Subscribe and hit...", "type": "cta" }
+  ],
+  "missing": []
+}
+```
+
+### GET /api/content/tags
+
+List all unique tags user has used.
+
+**Response:**
+```json
+{
+  "tags": ["@n8n", "@automation", "@tutorial", "@main-cta"]
+}
+```
+
+### POST /api/ideation/generate
+
+Generate content options using AI.
+
+**Body:**
+```json
+{
+  "type": "hook",
+  "topic": "A comprehensive beginner tutorial on getting started with n8n",
+  "count": 5,
+  "style": ["question", "bold_claim", "story"],
+  "archetype": "tutorial",
+  "channelBible": { ... }  // Optional: include for tone matching
+}
+```
+
+**Response:**
+```json
+{
+  "options": [
+    {
+      "content": "Everyone's talking about automation, but n8n is the one tool that actually delivers...",
+      "style": "bold_claim"
+    },
+    {
+      "content": "What if I told you that you could automate your entire workflow for free?",
+      "style": "question"
+    }
+  ]
+}
+```
+
+---
+
+## Part 3: Content Library Page
+
+### Location
+
+Add to sidebar: "Content" (near Elements)
+
+Route: `/content`
+
+### Page Layout
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Content Library                                       [+ New Content]  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  [All] [Hooks] [Titles] [Descriptions] [Intros] [CTAs] [Scripts]       │
+│                                                                         │
+│  🔍 [Search content...                                      ]          │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ 🎣 n8n Hook - Automation                              hook      │   │
+│  │ "Everyone's using n8n wrong. Here's the one thing..."           │   │
+│  │ [@n8n] [@automation]                          Used 5× · Jan 6   │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ 📰 Ultimate n8n Tutorial Title                        title     │   │
+│  │ "The Ultimate n8n Tutorial for Beginners (2024)"                │   │
+│  │ [@n8n] [@tutorial]                            Used 3× · Jan 5   │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ 📝 Standard Video Description                    description    │   │
+│  │ "In this video, we'll cover everything you need to know..."     │   │
+│  │ [@template] [@standard]                       Used 12× · Jan 4   │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  [Load more...]                                                         │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### ContentCard
+
+Shows:
+- Icon based on type (🎣 hook, 📰 title, 📝 description, 🎬 intro, 📢 cta)
+- Name
+- Content preview (truncated)
+- Tags as badges
+- Usage count and date
+
+On hover:
+- Edit button
+- Delete button
+- Copy button
+
+On click:
+- Open ContentEditModal
+
+### ContentEditModal
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Edit Content                                     [×]   │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  Name                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ n8n Hook - Automation                            │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  Type                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Hook                                         ▼  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  Content                                                │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Everyone's using n8n wrong. Here's the one      │   │
+│  │ thing that changed everything for me...         │   │
+│  │                                                  │   │
+│  │                                                  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  Tags                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ [@n8n] [@automation] [@hook]  [+ Add]           │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  Original Topic                                         │
+│  n8n beginner tutorial                                  │
+│                                                         │
+│  Used 5 times · Created Jan 6, 2026                    │
+│                                                         │
+│  [Delete]                              [Save]           │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### ContentCreateModal
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  New Content                                      [×]   │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  Type                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Select type...                               ▼  │   │
+│  └─────────────────────────────────────────────────┘   │
+│  • Hook — Opening line to grab attention               │
+│  • Title — YouTube video title                          │
+│  • Description — Full video description                │
+│  • Intro — Introduction paragraph                       │
+│  • CTA — Call-to-action text                           │
+│                                                         │
+│  Name                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │                                                  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  Content                                                │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │                                                  │   │
+│  │                                                  │   │
+│  │                                                  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  Tags                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ [+ Add tag]                                      │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  [Cancel]                              [Save Content]   │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Part 4: Ideation Studio
+
+### Location
+
+Route: `/ideation`
+
+Add to sidebar: "Ideation Studio" (prominent, near top)
+
+### Wizard Flow
+
+5 steps, each generates options and lets user save favorites:
+
+```
+[1. Topic] → [2. Hooks] → [3. Titles] → [4. Description] → [5. Thumbnail]
+```
+
+### Step 1: Topic
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  VidFlow                                                    [Projects]  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│            ① ─────── ② ─────── ③ ─────── ④ ─────── ⑤                  │
+│          Topic     Hooks    Titles   Description  Thumbnail             │
+│            ●         ○         ○         ○          ○                   │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  Video Topic                                                            │
+│  Enter your video topic or concept.                                     │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                                                                  │   │
+│  │ A comprehensive beginner tutorial on getting started with n8n.  │   │
+│  │ From basic installation to building agentic workflows.          │   │
+│  │                                                                  │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  Tips for a good topic:                                                │
+│  • Be specific about what you want to cover                            │
+│  • Mention your target audience                                        │
+│  • Include the key angle or unique perspective                         │
+│                                                                         │
+│  Video Format (optional)                                               │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐         │
+│  │Tutorial │ │Listicle │ │Explainer│ │  News   │ │ Review  │         │
+│  │    ●    │ │    ○    │ │    ○    │ │    ○    │ │    ○    │         │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘         │
+│                                                                         │
+│                                                                         │
+│                                              [Continue to Hooks →]      │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**State captured:**
+```typescript
+{
+  topic: string;
+  archetype?: string;
+}
+```
+
+### Step 2: Hooks
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  VidFlow                                                    [Projects]  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│            ① ─────── ② ─────── ③ ─────── ④ ─────── ⑤                  │
+│          Topic     Hooks    Titles   Description  Thumbnail             │
+│            ✓         ●         ○         ○          ○                   │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  Hook Ideas                                                             │
+│  Select hooks to save to your Content Library.                         │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ ☑ Option 1                                            question  │   │
+│  │                                                                  │   │
+│  │ "What if I told you that you could automate your entire         │   │
+│  │ business workflow for free? No coding required."                │   │
+│  │                                                                  │   │
+│  │ [Edit]                                                          │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ ☐ Option 2                                          bold_claim  │   │
+│  │                                                                  │   │
+│  │ "n8n changed everything about how I work. After 6 months of    │   │
+│  │ using it, I can't imagine going back."                          │   │
+│  │                                                                  │   │
+│  │ [Edit]                                                          │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ ☑ Option 3                                              story   │   │
+│  │                                                                  │   │
+│  │ "Last month, I spent 4 hours on a task that should've taken    │   │
+│  │ 10 minutes. Then I discovered n8n."                             │   │
+│  │                                                                  │   │
+│  │ [Edit]                                                          │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ ☐ Option 4                                           statistic  │   │
+│  │                                                                  │   │
+│  │ "87% of small businesses waste 10+ hours a week on repetitive  │   │
+│  │ tasks. Here's how to get that time back."                       │   │
+│  │                                                                  │   │
+│  │ [Edit]                                                          │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ ☐ Option 5                                         controversy  │   │
+│  │                                                                  │   │
+│  │ "Everyone's recommending Zapier, but they're wrong. Here's     │   │
+│  │ what you should use instead."                                   │   │
+│  │                                                                  │   │
+│  │ [Edit]                                                          │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  [🔄 Generate More]                                                    │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  💬 Refine with AI                                                     │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ Make option 3 more urgent, add a specific number               │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│  [Apply to Selected]                                                   │
+│                                                                         │
+│                                                                         │
+│  [← Back]              2 selected              [Continue to Titles →]  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Features:**
+- Checkbox to select/deselect each option
+- Edit button inline edits the text
+- "Generate More" adds more options
+- "Refine with AI" modifies selected options based on instruction
+- Selected count shown in footer
+- Selected hooks saved to Content Library on "Continue"
+
+### Step 3: Titles
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  VidFlow                                                    [Projects]  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│            ① ─────── ② ─────── ③ ─────── ④ ─────── ⑤                  │
+│          Topic     Hooks    Titles   Description  Thumbnail             │
+│            ✓         ✓         ●         ○          ○                   │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  Title Ideas                                                            │
+│  Select titles to save to your Content Library.                        │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ ☑ "The Ultimate n8n Tutorial for Beginners (2024)"              │   │
+│  │   62 characters · Numbers ✓ · Year ✓                            │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ ☐ "n8n Crash Course: From Zero to Automation Hero"              │   │
+│  │   49 characters · Power words ✓                                 │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ ☐ "I Automated My Entire Business with n8n (Here's How)"        │   │
+│  │   53 characters · Personal angle ✓                              │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ ☑ "Stop Paying for Zapier: The Free Alternative That's Better"  │   │
+│  │   58 characters · Comparison ✓ · Controversial ✓                │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ ☐ "n8n Tutorial: Build Your First Workflow in 10 Minutes"       │   │
+│  │   54 characters · Time promise ✓                                │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  [🔄 Generate More]                                                    │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  💬 Refine with AI                                                     │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                                                                  │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│  [Apply to Selected]                                                   │
+│                                                                         │
+│                                                                         │
+│  [← Back]             2 selected          [Continue to Description →]  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Features:**
+- Character count shown
+- Title quality indicators (numbers, power words, year, etc.)
+- Same select/edit/generate/refine pattern
+
+### Step 4: Description
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  VidFlow                                                    [Projects]  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│            ① ─────── ② ─────── ③ ─────── ④ ─────── ⑤                  │
+│          Topic     Hooks    Titles   Description  Thumbnail             │
+│            ✓         ✓         ✓         ●          ○                   │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  Video Description                                                      │
+│  Edit and save your video description.                                 │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ In this comprehensive n8n tutorial, you'll learn everything     │   │
+│  │ you need to know to get started with workflow automation.       │   │
+│  │                                                                  │   │
+│  │ 🎯 What you'll learn:                                           │   │
+│  │ • How to install and set up n8n                                 │   │
+│  │ • Understanding nodes and workflows                             │   │
+│  │ • Building your first automation                                │   │
+│  │ • Advanced tips for agentic workflows                           │   │
+│  │                                                                  │   │
+│  │ ⏱️ Timestamps:                                                   │   │
+│  │ 0:00 - Introduction                                             │   │
+│  │ 2:15 - Installing n8n                                           │   │
+│  │ 5:30 - Your First Workflow                                      │   │
+│  │ 12:00 - Advanced Features                                       │   │
+│  │ 18:45 - Agentic Workflows                                       │   │
+│  │ 24:00 - Wrap Up                                                 │   │
+│  │                                                                  │   │
+│  │ 🔗 Links:                                                        │   │
+│  │ n8n Website: https://n8n.io                                     │   │
+│  │ Documentation: https://docs.n8n.io                              │   │
+│  │                                                                  │   │
+│  │ 👋 Connect with me:                                              │   │
+│  │ Twitter: @handle                                                │   │
+│  │                                                                  │   │
+│  │ #n8n #automation #tutorial #nocode                              │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  [🔄 Regenerate]  [✨ Improve with AI]                                 │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  ☑ Save to Content Library                                             │
+│                                                                         │
+│                                                                         │
+│  [← Back]                              [Continue to Thumbnail →]        │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Features:**
+- Full editable description
+- Regenerate button
+- "Improve with AI" for refinements
+- Optional save to Content Library
+- Timestamps auto-generated based on structure (placeholders)
+
+### Step 5: Thumbnail
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  VidFlow                                                    [Projects]  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│            ① ─────── ② ─────── ③ ─────── ④ ─────── ⑤                  │
+│          Topic     Hooks    Titles   Description  Thumbnail             │
+│            ✓         ✓         ✓         ✓          ●                   │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  Thumbnail                                                              │
+│  Create a thumbnail in the Thumbnail Studio.                           │
+│                                                                         │
+│  Your selected title:                                                  │
+│  "The Ultimate n8n Tutorial for Beginners (2024)"                      │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                                                                  │   │
+│  │                                                                  │   │
+│  │              [🎨 Open Thumbnail Studio]                         │   │
+│  │                                                                  │   │
+│  │         Title and topic will be pre-filled                      │   │
+│  │                                                                  │   │
+│  │                                                                  │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  Or select from Elements:                                              │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                                                                  │   │
+│  │  [Select existing thumbnail from Elements Library]              │   │
+│  │                                                                  │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│                                                                         │
+│  [← Back]                                    [Finish & View Summary]    │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Features:**
+- Links to Thumbnail Studio with context pre-filled
+- Or select from existing Elements
+- Completes the ideation flow
+
+### Summary/Complete Page
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  VidFlow                                                    [Projects]  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ✅ Ideation Complete!                                                  │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  Topic                                                                  │
+│  A comprehensive beginner tutorial on getting started with n8n.        │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  Saved to Content Library:                                             │
+│                                                                         │
+│  🎣 2 Hooks                                                            │
+│  • "What if I told you that you could automate..."                     │
+│  • "Last month, I spent 4 hours on a task..."                          │
+│                                                                         │
+│  📰 2 Titles                                                           │
+│  • "The Ultimate n8n Tutorial for Beginners (2024)"                    │
+│  • "Stop Paying for Zapier: The Free Alternative..."                   │
+│                                                                         │
+│  📝 1 Description                                                      │
+│  • "In this comprehensive n8n tutorial..."                             │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  What's next?                                                          │
+│                                                                         │
+│  ┌─────────────────────┐  ┌─────────────────────┐                      │
+│  │ 🎬 Run Pipeline     │  │ 📚 View Content     │                      │
+│  │                     │  │    Library          │                      │
+│  │ Use this content    │  │                     │                      │
+│  │ in a video run      │  │ Manage your saved   │                      │
+│  │                     │  │ content             │                      │
+│  └─────────────────────┘  └─────────────────────┘                      │
+│                                                                         │
+│  ┌─────────────────────┐  ┌─────────────────────┐                      │
+│  │ 🎨 Thumbnail        │  │ ➕ New Ideation     │                      │
+│  │    Studio           │  │                     │                      │
+│  │                     │  │ Start fresh with    │                      │
+│  │ Create thumbnail    │  │ another topic       │                      │
+│  │ for this video      │  │                     │                      │
+│  └─────────────────────┘  └─────────────────────┘                      │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Part 5: Script Node Integration
+
+### Updated Script Panel
+
+Add content source options to Script Node panel:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Script                                                           [×]   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  [Format] [Structure] [Hook] [Title] [Description] [Tags] [AI Model]   │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  HOOK TAB:                                                              │
+│                                                                         │
+│  Hook Source                                                            │
+│                                                                         │
+│  ○ Use saved hook                                                      │
+│    Select from Content Library                                         │
+│                                                                         │
+│  ○ Generate with examples                                              │
+│    Use saved hooks as style reference                                  │
+│                                                                         │
+│  ○ Generate fresh                                                       │
+│    AI creates at runtime based on topic                                │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  [If "Use saved hook" selected:]                                        │
+│                                                                         │
+│  Selected Hook                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                                                                  │   │
+│  │  [No hook selected]                                             │   │
+│  │                                                                  │   │
+│  │  [Select from Content Library]                                  │   │
+│  │                                                                  │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  Or reference by tag: @                                                │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ @n8n-hook                                                       │   │← MentionTextarea
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  [If "Generate with examples" selected:]                                │
+│                                                                         │
+│  Example Hooks (for style reference)                                   │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  [@n8n-hook] [@automation-hook]  [+ Add from Library]           │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│  AI will match the style of these hooks                                │
+│                                                                         │
+│  ─────────────────────────────────────────────────────────────────────  │
+│                                                                         │
+│  [If "Generate fresh" selected:]                                        │
+│                                                                         │
+│  Hook Style Preferences                                                │
+│  ☑ Question                                                            │
+│  ☑ Bold claim                                                          │
+│  ☐ Story                                                               │
+│  ☐ Statistic                                                           │
+│                                                                         │
+│  Number to generate: [3 ▼]                                             │
+│  (Best one auto-selected)                                              │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Same Pattern for Title Tab
+
+```
+│  TITLE TAB:                                                             │
+│                                                                         │
+│  Title Source                                                           │
+│                                                                         │
+│  ○ Use saved title                                                     │
+│  ○ Generate with examples                                              │
+│  ○ Generate fresh                                                       │
+│                                                                         │
+│  [Same UI pattern as Hook tab]                                         │
+│                                                                         │
+```
+
+### Same Pattern for Description Tab
+
+```
+│  DESCRIPTION TAB:                                                       │
+│                                                                         │
+│  Description Source                                                     │
+│                                                                         │
+│  ○ Use saved description                                               │
+│  ○ Use template                                                         │
+│  ○ Generate fresh                                                       │
+│                                                                         │
+│  [If "Use template":]                                                   │
+│                                                                         │
+│  Template                                                               │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ {intro}                                                          │   │
+│  │                                                                  │   │
+│  │ ⏱️ Timestamps:                                                   │   │
+│  │ {timestamps}                                                     │   │
+│  │                                                                  │   │
+│  │ 🔗 Links:                                                        │   │
+│  │ {links}                                                          │   │
+│  │                                                                  │   │
+│  │ {cta}                                                            │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│  Variables: {intro}, {timestamps}, {links}, {cta}                      │
+│                                                                         │
+```
+
+### Script Node Config Schema
+
+```typescript
+interface ScriptNodeConfig {
+  // Format
+  archetype: string;
+  targetDuration: string;
+  
+  // Structure
+  sections: Section[];
+  
+  // Hook
+  hookSource: 'saved' | 'examples' | 'fresh';
+  hookContentId?: string;        // If saved
+  hookTag?: string;              // If using @tag
+  hookExampleTags?: string[];    // If examples
+  hookStyles?: string[];         // If fresh
+  hookCount?: number;            // If fresh
+  
+  // Title
+  titleSource: 'saved' | 'examples' | 'fresh';
+  titleContentId?: string;
+  titleTag?: string;
+  titleExampleTags?: string[];
+  titleCount?: number;
+  
+  // Description
+  descriptionSource: 'saved' | 'template' | 'fresh';
+  descriptionContentId?: string;
+  descriptionTag?: string;
+  descriptionTemplate?: string;
+  
+  // AI
+  model: string;
+  temperature: number;
+  customInstructions?: string;
+}
+```
+
+### Runtime Behavior
+
+**Hook Resolution:**
+```
+If hookSource = 'saved':
+  1. Fetch by hookContentId OR resolve hookTag via /api/content/resolve
+  2. Return exact content as hook
+  
+If hookSource = 'examples':
+  1. Resolve hookExampleTags to get example hooks
+  2. Include in AI prompt: "Match the style of these examples: ..."
+  3. Generate new hook
+  
+If hookSource = 'fresh':
+  1. Generate hookCount hooks with hookStyles preferences
+  2. Auto-select best one (or let AI pick)
+```
+
+Same pattern for title and description.
+
+### ContentPicker Component
+
+Reusable picker for selecting content from library:
+
+```typescript
+interface ContentPickerProps {
+  type: 'hook' | 'title' | 'description' | 'intro' | 'cta';
+  value?: string;           // Selected content ID
+  onChange: (id: string | null) => void;
+  placeholder?: string;
+}
+```
+
+Shows:
+- Currently selected content (preview)
+- "Change" button → opens picker modal
+- "Clear" button
+
+Picker modal:
+- List of content filtered by type
+- Search
+- Click to select
+
+---
+
+## Part 6: File Structure
+
+```
+src/
+├── app/
+│   ├── content/
+│   │   └── page.tsx                    # Content Library page
+│   ├── ideation/
+│   │   ├── page.tsx                    # Ideation wizard
+│   │   ├── layout.tsx                  # Wizard layout
+│   │   └── components/
+│   │       ├── WizardProgress.tsx      # Step indicator
+│   │       ├── TopicStep.tsx           # Step 1
+│   │       ├── HooksStep.tsx           # Step 2
+│   │       ├── TitlesStep.tsx          # Step 3
+│   │       ├── DescriptionStep.tsx     # Step 4
+│   │       ├── ThumbnailStep.tsx       # Step 5
+│   │       ├── SummaryStep.tsx         # Complete page
+│   │       ├── ContentOption.tsx       # Selectable option card
+│   │       └── RefineInput.tsx         # AI refinement input
+│   └── api/
+│       ├── content/
+│       │   ├── route.ts                # GET (list), POST (create)
+│       │   ├── bulk/
+│       │   │   └── route.ts            # POST bulk create
+│       │   ├── [id]/
+│       │   │   └── route.ts            # GET, PUT, DELETE
+│       │   ├── resolve/
+│       │   │   └── route.ts            # POST resolve @tags
+│       │   └── tags/
+│       │       └── route.ts            # GET all tags
+│       └── ideation/
+│           └── generate/
+│               └── route.ts            # POST generate hooks/titles/etc.
+├── components/
+│   ├── content/
+│   │   ├── ContentLibraryPage.tsx
+│   │   ├── ContentList.tsx
+│   │   ├── ContentCard.tsx
+│   │   ├── ContentEditModal.tsx
+│   │   ├── ContentCreateModal.tsx
+│   │   ├── ContentPicker.tsx           # Reusable picker
+│   │   └── index.ts
+│   └── pipeline/panels/
+│       └── ScriptPanel.tsx             # Updated with content sources
+├── lib/
+│   ├── content/
+│   │   ├── types.ts
+│   │   └── utils.ts
+│   └── ideation/
+│       ├── prompts.ts                  # AI prompts for generation
+│       └── utils.ts
+└── stores/
+    ├── contentStore.ts                 # Zustand store for content
+    └── ideationStore.ts                # Wizard state
+```
+
+---
+
+## Part 7: AI Generation Prompts
+
+### Hook Generation Prompt
+
+```typescript
+const generateHooksPrompt = (topic: string, archetype: string, styles: string[], count: number, channelBible?: ChannelBible) => `
+Generate ${count} compelling YouTube video hooks for the following topic:
+
+Topic: ${topic}
+Video Format: ${archetype}
+${channelBible ? `
+Channel Voice:
+- Tone: ${channelBible.tone}
+- Audience: ${channelBible.audience}
+- Style: ${channelBible.style}
+` : ''}
+
+Generate hooks in these styles: ${styles.join(', ')}
+
+Each hook should:
+- Be 1-3 sentences
+- Immediately grab attention
+- Create curiosity or urgency
+- Match the channel's voice
+
+Return as JSON array:
+[
+  { "content": "...", "style": "question" },
+  { "content": "...", "style": "bold_claim" }
+]
+`;
+```
+
+### Title Generation Prompt
+
+```typescript
+const generateTitlesPrompt = (topic: string, archetype: string, count: number) => `
+Generate ${count} YouTube video titles for:
+
+Topic: ${topic}
+Video Format: ${archetype}
+
+Requirements:
+- 40-70 characters ideal
+- Include numbers where appropriate
+- Use power words (Ultimate, Complete, Best, etc.)
+- Create curiosity gap
+- Avoid clickbait that doesn't deliver
+
+Return as JSON array:
+[
+  { "content": "...", "hasNumber": true, "hasPowerWord": true, "charCount": 52 }
+]
+`;
+```
+
+### Description Generation Prompt
+
+```typescript
+const generateDescriptionPrompt = (topic: string, title: string, sections: Section[]) => `
+Generate a YouTube video description for:
+
+Title: ${title}
+Topic: ${topic}
+
+Sections to cover:
+${sections.map(s => `- ${s.name}: ${s.duration}`).join('\n')}
+
+Include:
+1. Opening paragraph (2-3 sentences about value)
+2. What viewers will learn (bullet points)
+3. Timestamps (use placeholder times)
+4. Relevant links section
+5. Call-to-action
+6. Social links placeholder
+7. Hashtags (5-7 relevant)
+
+Format with emojis for visual separation.
+`;
+```
+
+---
+
+## Part 8: Implementation Order
+
+### Step 1: Database
+- [ ] Create `content_library` table migration
+- [ ] Set up RLS policies
+
+### Step 2: API Routes
+- [ ] GET /api/content (list)
+- [ ] POST /api/content (create)
+- [ ] POST /api/content/bulk (bulk create)
+- [ ] GET /api/content/[id]
+- [ ] PUT /api/content/[id]
+- [ ] DELETE /api/content/[id]
+- [ ] POST /api/content/resolve
+- [ ] GET /api/content/tags
+- [ ] POST /api/ideation/generate
+
+### Step 3: Content Library Page
+- [ ] ContentLibraryPage.tsx
+- [ ] ContentList.tsx
+- [ ] ContentCard.tsx
+- [ ] ContentEditModal.tsx
+- [ ] ContentCreateModal.tsx
+- [ ] Add to sidebar navigation
+
+### Step 4: Ideation Studio Wizard
+- [ ] Wizard layout and progress indicator
+- [ ] ideationStore.ts for wizard state
+- [ ] TopicStep.tsx
+- [ ] HooksStep.tsx (with generate/select/refine)
+- [ ] TitlesStep.tsx (with generate/select/refine)
+- [ ] DescriptionStep.tsx
+- [ ] ThumbnailStep.tsx
+- [ ] SummaryStep.tsx
+- [ ] Add to sidebar navigation
+
+### Step 5: Generation API
+- [ ] Hook generation endpoint
+- [ ] Title generation endpoint
+- [ ] Description generation endpoint
+- [ ] Refinement endpoint (modify selected content)
+
+### Step 6: Script Node Integration
+- [ ] ContentPicker component
+- [ ] Update ScriptPanel with source tabs
+- [ ] Hook source selection (saved/examples/fresh)
+- [ ] Title source selection
+- [ ] Description source selection
+- [ ] Update Script node execution to resolve content
+
+### Step 7: Testing
+- [ ] Create content manually
+- [ ] Run through ideation wizard
+- [ ] Save hooks/titles to library
+- [ ] Use saved content in Script node
+- [ ] Full pipeline run with saved content
+
+---
+
+## Part 9: Warnings
+
+### Don't Do These Things
+
+❌ **Don't make wizard steps required** — User can skip to any step or exit anytime
+
+❌ **Don't auto-advance wizard** — User controls when to move forward
+
+❌ **Don't lose wizard state on refresh** — Persist to localStorage or URL params
+
+❌ **Don't duplicate content on bulk save** — Check for duplicates by content hash
+
+❌ **Don't generate without topic** — Topic is required for all generation
+
+❌ **Don't forget channel bible** — Use it for tone matching in generation
+
+### Watch Out For
+
+⚠️ **Long generation times** — Show loading states, allow cancellation
+
+⚠️ **AI rate limits** — Don't spam generate button, debounce
+
+⚠️ **Large content** — Descriptions can be long, handle in UI gracefully
+
+⚠️ **Duplicate tags** — Normalize and dedupe
+
+⚠️ **Missing content at runtime** — Handle gracefully if saved content deleted
+
+---
+
+## Part 10: Testing Checklist
+
+### Content Library
+- [ ] Create content manually via modal
+- [ ] View content list with filters
+- [ ] Search content by name/text
+- [ ] Filter by type (hooks, titles, etc.)
+- [ ] Edit content name, text, tags
+- [ ] Delete content
+- [ ] Tags display and filter correctly
+
+### Ideation Studio
+- [ ] Complete full wizard flow
+- [ ] Generate hooks with different styles
+- [ ] Select multiple hooks to save
+- [ ] Edit hook inline before saving
+- [ ] "Generate More" adds options
+- [ ] "Refine with AI" modifies selected
+- [ ] Generate titles with quality indicators
+- [ ] Generate and edit description
+- [ ] Navigate back and forward in wizard
+- [ ] Summary shows all saved content
+- [ ] Content appears in Content Library after wizard
+
+### Script Node
+- [ ] Three source modes appear for hook
+- [ ] ContentPicker opens and selects content
+- [ ] @tag reference resolves correctly
+- [ ] "Generate with examples" uses saved content as reference
+- [ ] "Generate fresh" works with style preferences
+- [ ] Same for title and description tabs
+- [ ] Pipeline runs with saved content
+- [ ] Pipeline runs with generated content
+
+### Integration
+- [ ] Ideation → Content Library → Script Node full flow
+- [ ] @mention autocomplete shows content tags
+- [ ] used_count increments when content used in pipeline

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIDFLOW_OS // BRUTALIST_PREVIEW</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: black;
+            color: #00FF41;
+            font-family: 'Space Mono', monospace;
+            overflow-x: hidden;
+        }
+        ::selection {
+            background: #00FF41;
+            color: black;
+        }
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        .scanline {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+            z-index: 50;
+        }
+        .scanline::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100px;
+            background: linear-gradient(to bottom, transparent, rgba(0, 255, 65, 0.1), transparent);
+            animation: scanline 8s linear infinite;
+        }
+        @keyframes progress {
+            from { width: 0%; }
+            to { width: 100%; }
+        }
+        .animate-progress {
+            animation: progress 2s ease-in-out forwards;
+        }
+        .terminal-line {
+            display: none;
+        }
+        .terminal-line.visible {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="scanline"></div>
+
+    <div class="max-w-6xl mx-auto px-6 py-12 relative z-10">
+        <!-- Header -->
+        <header class="border-b border-[#333] pb-4 mb-12 flex justify-between items-end">
+            <div>
+                <h1 class="text-4xl font-bold tracking-tighter uppercase leading-none">
+                    VIDFLOW_OS <span class="text-xs align-top bg-[#00FF41] text-black px-1">v1.0.4</span>
+                </h1>
+                <p class="text-xs mt-2 opacity-70 uppercase">TERMINAL_NODE: C:\USERS\GHOST\PIPELINE_INIT</p>
+            </div>
+            <div class="text-right text-xs hidden md:block uppercase">
+                <p>STATUS: <span class="animate-pulse">ONLINE</span></p>
+                <p>UPTIME: 1,402:42:12</p>
+                <p>REGION: GLOBAL_EDGE</p>
+            </div>
+        </header>
+
+        <!-- Boot Sequence -->
+        <div id="boot-container" class="h-[400px] border border-[#333] p-8 flex flex-col justify-end bg-[#050505] mb-24">
+            <div id="terminal-lines">
+                <div class="terminal-line mb-1" data-delay="100"><span class="opacity-50 mr-2">[SYSTEM]</span>INITIALIZING BOOT SEQUENCE...</div>
+                <div class="terminal-line mb-1" data-delay="400"><span class="opacity-50 mr-2">[SYSTEM]</span>LOADING NEURAL SCRIPT ENGINE (CLAUDE-3.5-SONNET)... OK</div>
+                <div class="terminal-line mb-1" data-delay="700"><span class="opacity-50 mr-2">[SYSTEM]</span>CONNECTING ELEVENLABS VOICE API... OK</div>
+                <div class="terminal-line mb-1" data-delay="1000"><span class="opacity-50 mr-2">[SYSTEM]</span>ESTABLISHING YOUTUBE_DATA_STREAM... OK</div>
+                <div class="terminal-line mb-1" data-delay="1300"><span class="opacity-50 mr-2">[SYSTEM]</span>OPTIMIZING THROUGHPUT ARCHITECTURE... OK</div>
+                <div class="terminal-line mb-1" data-delay="1600"><span class="opacity-50 mr-2">[SYSTEM]</span>REMOVING HUMAN BIAS... OK</div>
+                <div class="terminal-line mb-1" data-delay="2000"><span class="opacity-50 mr-2">[SYSTEM]</span>SYSTEM READY.</div>
+            </div>
+            <div class="mt-4 h-1 bg-[#333] w-full">
+                <div class="h-full bg-[#00FF41] animate-progress"></div>
+            </div>
+        </div>
+
+        <!-- Main Content (Hidden until boot) -->
+        <div id="main-content" class="hidden">
+            <section class="mb-24">
+                <div class="grid md:grid-cols-2 gap-12 items-center">
+                    <div>
+                        <div class="inline-block border border-[#00FF41] px-2 py-1 mb-6 text-xs font-bold uppercase tracking-widest">
+                            Industrial Content Manufacturing
+                        </div>
+                        <h2 class="text-6xl md:text-8xl font-bold tracking-tighter uppercase leading-[0.9] mb-8">
+                            YOUR PASSION IS A <span class="bg-[#00FF41] text-black px-2">BOTTLENECK</span>.
+                        </h2>
+                        <p class="text-lg text-[#00FF41]/80 max-w-md mb-8 leading-tight">
+                            Stop "creating." Start deploying. VidFlow is a high-speed assembly line for the YouTube attention economy. 
+                            Connect nodes. Run the pipeline. Collect the revenue.
+                        </p>
+                        <button class="bg-[#00FF41] text-black font-bold text-2xl px-8 py-4 hover:bg-white transition-colors uppercase tracking-tighter">
+                            INITIALIZE_ACCESS_COMMAND
+                        </button>
+                    </div>
+                    <div class="border border-[#333] p-2 bg-[#050505] relative group">
+                        <div class="absolute -top-3 -right-3 bg-red-600 text-white px-2 py-1 text-[10px] font-bold animate-bounce uppercase">
+                            LIVE_EXECUTION
+                        </div>
+                        <div class="aspect-square bg-black border border-[#222] p-4 flex flex-col overflow-hidden">
+                            <div id="matrix-text" class="flex-1 overflow-hidden text-[10px] text-[#00FF41]/40 leading-none">
+                                <!-- Matrix text filled via JS -->
+                            </div>
+                            <div class="mt-4 p-4 border border-[#00FF41] bg-black">
+                                <div class="flex justify-between text-xs mb-2 uppercase">
+                                    <span>SCRIPT_NODE_v2</span>
+                                    <span>98% COMPLETE</span>
+                                </div>
+                                <div class="h-2 bg-[#111]">
+                                    <div class="h-full bg-[#00FF41] w-[98%]"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Nodes -->
+            <section class="mb-24">
+                <div class="flex items-center gap-4 mb-8">
+                    <h2 class="text-3xl font-bold uppercase tracking-tighter">NODE_ARCHITECTURE</h2>
+                    <div class="h-[1px] flex-1 bg-[#333]"></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-1">
+                    <div class="border border-[#333] p-4 bg-black hover:border-[#00FF41] transition-colors group cursor-crosshair">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-xl font-bold uppercase tracking-tighter">TRIGGER</h3>
+                            <span class="text-[10px] bg-[#00FF41] text-black px-1 font-bold">ACTIVE</span>
+                        </div>
+                        <p class="text-xs text-[#00FF41]/70 leading-tight">NicheRadar integration detects high-velocity trends before they saturate. Auto-triggers production.</p>
+                        <div class="mt-4 h-1 bg-[#333]"><div class="h-full bg-[#00FF41] w-[65%] group-hover:w-full transition-all duration-700"></div></div>
+                    </div>
+                    <!-- Repeat nodes for demo -->
+                    <div class="border border-[#333] p-4 bg-black hover:border-[#00FF41] transition-colors group cursor-crosshair">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-xl font-bold uppercase tracking-tighter">SCRIPT</h3>
+                            <span class="text-[10px] bg-[#00FF41] text-black px-1 font-bold">READY</span>
+                        </div>
+                        <p class="text-xs text-[#00FF41]/70 leading-tight">Claude-powered engine generates scripts in your specific channel bible voice. Zero generic output.</p>
+                        <div class="mt-4 h-1 bg-[#333]"><div class="h-full bg-[#00FF41] w-[85%] group-hover:w-full transition-all duration-700"></div></div>
+                    </div>
+                    <div class="border border-[#333] p-4 bg-black hover:border-[#00FF41] transition-colors group cursor-crosshair">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-xl font-bold uppercase tracking-tighter">VOICE</h3>
+                            <span class="text-[10px] bg-[#00FF41] text-black px-1 font-bold">CONNECTED</span>
+                        </div>
+                        <p class="text-xs text-[#00FF41]/70 leading-tight">ElevenLabs synthesis with emotion mapping. Cloned voices that hold retention.</p>
+                        <div class="mt-4 h-1 bg-[#333]"><div class="h-full bg-[#00FF41] w-[40%] group-hover:w-full transition-all duration-700"></div></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Footer -->
+        <footer class="border-t border-[#333] pt-8 flex flex-col md:flex-row justify-between gap-8 mt-24">
+            <div class="text-[10px] opacity-40 uppercase">
+                © 2026 VIDFLOW_OS. ALL RIGHTS RESERVED. <br />
+                UNAUTHORIZED REPRODUCTION OF PIPELINE ARCHITECTURE WILL BE LOGGED.
+            </div>
+            <div class="flex gap-8 text-xs uppercase font-bold tracking-widest">
+                <a href="#" class="hover:text-white">API_DOCS</a>
+                <a href="#" className="hover:text-white">SYSTEM_STATUS</a>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Boot sequence logic
+        const lines = document.querySelectorAll('.terminal-line');
+        lines.forEach(line => {
+            setTimeout(() => {
+                line.classList.add('visible');
+            }, parseInt(line.dataset.delay));
+        });
+
+        setTimeout(() => {
+            document.getElementById('boot-container').classList.add('hidden');
+            document.getElementById('main-content').classList.remove('hidden');
+        }, 2500);
+
+        // Matrix background text
+        const matrixContainer = document.getElementById('matrix-text');
+        if (matrixContainer) {
+            let content = '';
+            for (let i = 0; i < 40; i++) {
+                content += '<div>' + Math.random().toString(36).substring(2, 15).repeat(5) + '</div>';
+            }
+            matrixContainer.innerHTML = content;
+        }
+    </script>
+</body>
+</html>

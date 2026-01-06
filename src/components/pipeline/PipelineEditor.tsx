@@ -17,10 +17,16 @@ import {
   EdgeProps,
   getBezierPath,
   BaseEdge,
+  NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
 import PipelineNode, { PipelineNodeData } from './PipelineNode'
+import { ScriptPanel } from '@/components/nodes/panels/script/ScriptPanel'
+import { VoicePanel } from '@/components/nodes/panels/voice/VoicePanel'
+import { ThumbnailPanel } from '@/components/nodes/panels/thumbnail/ThumbnailPanel'
+import { AssemblyPanel } from '@/components/nodes/panels/assembly/AssemblyPanel'
+import { PublishPanel } from '@/components/nodes/panels/publish/PublishPanel'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const NODE_TYPES: Record<string, any> = {
@@ -136,6 +142,20 @@ function PipelineEditorInner() {
   const [nodes, setNodes, onNodesChange] = useNodesState(DEFAULT_NODES)
   const [edges, setEdges, onEdgesChange] = useEdgesState(DEFAULT_EDGES)
   const [isDragging, setIsDragging] = useState(false)
+  const [selectedNode, setSelectedNode] = useState<{ id: string; type: string } | null>(null)
+
+  // Handle node click to open panel
+  const onNodeClick: NodeMouseHandler = useCallback((event, node) => {
+    const data = node.data as unknown as PipelineNodeData
+    if (data.nodeType && data.nodeType !== 'trigger') {
+      setSelectedNode({ id: node.id, type: data.nodeType })
+    }
+  }, [])
+
+  // Close panel
+  const closePanel = useCallback(() => {
+    setSelectedNode(null)
+  }, [])
 
   // Handle new connections
   const onConnect = useCallback(
@@ -340,6 +360,7 @@ function PipelineEditorInner() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onNodeClick={onNodeClick}
             nodeTypes={NODE_TYPES}
             edgeTypes={EDGE_TYPES}
             fitView
@@ -375,10 +396,63 @@ function PipelineEditorInner() {
         </div>
       </div>
 
-      {/* CSS for animated edges */}
+      {/* Node Configuration Panel Drawer */}
+      {selectedNode && (
+        <div className="node-panel-drawer" style={{
+          position: 'fixed',
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: '420px',
+          background: 'var(--bg-primary)',
+          borderLeft: '1px solid var(--border)',
+          zIndex: 50,
+          display: 'flex',
+          flexDirection: 'column',
+          animation: 'slideIn 0.2s ease-out',
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            padding: '12px 16px',
+            borderBottom: '1px solid var(--border)',
+          }}>
+            <button
+              onClick={closePanel}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                padding: '8px',
+                borderRadius: '6px',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            {selectedNode.type === 'script' && <ScriptPanel />}
+            {selectedNode.type === 'voice' && <VoicePanel />}
+            {selectedNode.type === 'thumbnail' && <ThumbnailPanel />}
+            {selectedNode.type === 'assembly' && <AssemblyPanel />}
+            {selectedNode.type === 'publish' && <PublishPanel />}
+          </div>
+        </div>
+      )}
+
+      {/* CSS for animated edges and panel */}
       <style jsx global>{`
         @keyframes edgeFlow {
           to { stroke-dashoffset: -12; }
+        }
+        @keyframes slideIn {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
         }
         .react-flow__node {
           cursor: move !important;

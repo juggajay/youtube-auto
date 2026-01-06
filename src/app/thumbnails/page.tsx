@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { SaveToElementsModal } from '@/components/elements/SaveToElementsModal'
 
 interface Generation {
   id: string
@@ -9,6 +10,13 @@ interface Generation {
   images: string[]
   aspectRatio: string
   timestamp: Date
+}
+
+interface SaveModalState {
+  isOpen: boolean
+  imageData: string
+  prompt: string
+  aspectRatio: string
 }
 
 const ASPECT_RATIOS = ['16:9', '1:1', '4:3', '9:16'] as const
@@ -21,6 +29,12 @@ export default function ThumbnailStudioPage() {
   const [generations, setGenerations] = useState<Generation[]>([])
   const [selectedGeneration, setSelectedGeneration] = useState<Generation | null>(null)
   const [currentImages, setCurrentImages] = useState<string[]>([])
+  const [saveModalState, setSaveModalState] = useState<SaveModalState>({
+    isOpen: false,
+    imageData: '',
+    prompt: '',
+    aspectRatio: '16:9',
+  })
 
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim() || isGenerating) return
@@ -88,6 +102,19 @@ export default function ThumbnailStudioPage() {
     link.href = img
     link.download = `thumbnail-${index + 1}.png`
     link.click()
+  }
+
+  const handleSaveToElements = (img: string) => {
+    setSaveModalState({
+      isOpen: true,
+      imageData: img,
+      prompt: selectedGeneration?.prompt || prompt,
+      aspectRatio: selectedGeneration?.aspectRatio || aspectRatio,
+    })
+  }
+
+  const handleCloseSaveModal = () => {
+    setSaveModalState(prev => ({ ...prev, isOpen: false }))
   }
 
   return (
@@ -268,6 +295,17 @@ export default function ThumbnailStudioPage() {
                                     <line x1="12" y1="15" x2="12" y2="3"/>
                                   </svg>
                                 </button>
+                                <button
+                                  className="image-overlay-btn"
+                                  onClick={() => handleSaveToElements(img)}
+                                  title="Save to Elements"
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                    <polyline points="17 21 17 13 7 13 7 21"/>
+                                    <polyline points="7 3 7 8 15 8"/>
+                                  </svg>
+                                </button>
                                 <button className="image-overlay-btn" title="Expand">
                                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
@@ -428,6 +466,15 @@ export default function ThumbnailStudioPage() {
           </div>
         </div>
       </main>
+
+      {/* Save to Elements Modal */}
+      <SaveToElementsModal
+        isOpen={saveModalState.isOpen}
+        onClose={handleCloseSaveModal}
+        imageData={saveModalState.imageData}
+        prompt={saveModalState.prompt}
+        aspectRatio={saveModalState.aspectRatio}
+      />
     </div>
   )
 }

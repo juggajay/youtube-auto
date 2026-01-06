@@ -1,0 +1,557 @@
+# VidFlow Complete UX Flow
+
+## Current State
+
+**Backend:** ✅ Complete (337 tests, all nodes working)
+**UI:** ❌ Empty shells — no input forms, no config panels, no modals
+
+---
+
+## The Missing Pieces
+
+### 1. Pre-Run Modal (CRITICAL)
+When user clicks "Run Pipeline", they need to:
+- Enter a topic
+- Select video archetype
+- See cost estimate
+- Confirm and start
+
+### 2. Node Config Panels (CRITICAL)
+When user clicks a node in Pipeline Editor:
+- Slide-in panel from right
+- Node-specific settings
+- Preview where possible
+
+### 3. Intervention Modal (CRITICAL)
+When pipeline pauses for review:
+- Show generated content
+- Allow inline editing
+- Approve / Regenerate / Skip
+
+### 4. Channel Bible Editor (HIGH)
+Global settings for brand voice:
+- Tone, vocabulary, style
+- Example scripts
+- Persisted per project
+
+---
+
+## Complete User Flows
+
+### Flow A: First Video (New User)
+
+```
+1. User lands on Dashboard
+   └─→ Sees empty state: "Create your first video"
+   
+2. Clicks "Create Pipeline" or "Use Template"
+   └─→ Goes to Pipeline Editor with default template loaded
+   
+3. Clicks "Run Pipeline" button
+   └─→ PRE-RUN MODAL opens (this is the key missing piece)
+   
+4. In Pre-Run Modal:
+   ├─→ Step 1: Enter topic ("Top 10 AI Tools in 2024")
+   ├─→ Step 2: Select archetype (Listicle, Tutorial, etc.)
+   ├─→ Step 3: Quick settings (voice, duration, publish mode)
+   ├─→ Step 4: Review cost estimate
+   └─→ Click "Start Run"
+   
+5. Redirected to Run View
+   └─→ Watch pipeline execute with live progress
+   
+6. Pipeline pauses at Script node
+   └─→ INTERVENTION MODAL opens
+   ├─→ User reviews generated script
+   ├─→ Can edit inline, regenerate, or approve
+   └─→ Clicks "Approve & Continue"
+   
+7. Pipeline continues through Voice, Thumbnail, Assembly
+   └─→ May pause again for thumbnail selection
+   
+8. Pipeline reaches Publish
+   └─→ Shows preview, asks for final confirmation
+   └─→ User confirms, video publishes to YouTube
+   
+9. Success! 
+   └─→ Shows YouTube link, stats, cost breakdown
+```
+
+---
+
+## UI Component Specifications
+
+### PRE-RUN MODAL
+
+**Trigger:** Click "Run Pipeline" button
+
+**Layout:** Full-screen modal or large slide-over
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  ✕                                                              │
+│                                                                 │
+│     🎬 New Video Run                                            │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  What's this video about?                                │   │
+│  │                                                          │   │
+│  │  ┌──────────────────────────────────────────────────┐   │   │
+│  │  │ Top 10 AI Tools That Will Change 2024            │   │   │
+│  │  └──────────────────────────────────────────────────┘   │   │
+│  │                                                          │   │
+│  │  💡 Be specific. Include key points you want covered.   │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  Video Format                                                   │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐              │
+│  │ Listicle│ │Tutorial │ │Explainer│ │  News   │              │
+│  │   ✓     │ │         │ │         │ │         │              │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘              │
+│                                                                 │
+│  Quick Settings                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Voice: Adam (American Male)              [Change]       │   │
+│  │  Duration: 8-12 minutes                   [Change]       │   │
+│  │  Publish: Draft (review before public)    [Change]       │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ○ Review script before voice generation                       │
+│  ○ Review thumbnail before assembly                            │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Estimated Cost: ~$0.45                                  │   │
+│  │  ├─ Script (Claude): $0.02                               │   │
+│  │  ├─ Voice (ElevenLabs): $0.28                            │   │
+│  │  ├─ Thumbnail (Imagen): $0.12                            │   │
+│  │  └─ Assembly: $0.03                                      │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│                           ┌──────────────────────────────────┐ │
+│     [Cancel]              │  ▶ Start Run  ·  Est. 8 min     │ │
+│                           └──────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Fields:**
+- Topic (required) — Text area, 500 char max
+- Archetype selection — Visual cards (Listicle, Tutorial, Explainer, News, Review, etc.)
+- Quick settings — Expandable section with voice, duration, publish mode
+- Intervention checkboxes — Which nodes to pause for review
+- Cost breakdown — Calculated from estimateCost() on each node
+
+**Actions:**
+- Cancel — Close modal
+- Start Run — Create run, redirect to Run View
+
+---
+
+### NODE CONFIG PANEL
+
+**Trigger:** Click any node in Pipeline Editor
+
+**Layout:** Slide-in panel from right (400-500px wide)
+
+**Panel Structure:**
+```
+┌─────────────────────────────────────────┐
+│  ← Back                    Script Node  │
+│─────────────────────────────────────────│
+│                                         │
+│  AI Model                               │
+│  ┌─────────────────────────────────┐   │
+│  │ Claude Sonnet 4         ▼       │   │
+│  └─────────────────────────────────┘   │
+│                                         │
+│  Temperature                            │
+│  ○───────────●─────────○  0.7          │
+│  Focused          Creative              │
+│                                         │
+│  ─────────────────────────────────────  │
+│                                         │
+│  Structure                              │
+│  ┌─────────────────────────────────┐   │
+│  │  ☰ Hook (15-30s)          [Edit]│   │
+│  │  ☰ Introduction (30-60s)  [Edit]│   │
+│  │  ☰ Main Points (5-8 min)  [Edit]│   │
+│  │  ☰ Conclusion (30-60s)    [Edit]│   │
+│  │  ☰ CTA (15-30s)           [Edit]│   │
+│  │                                  │   │
+│  │  [+ Add Section]                 │   │
+│  └─────────────────────────────────┘   │
+│                                         │
+│  ─────────────────────────────────────  │
+│                                         │
+│  Custom Instructions                    │
+│  ┌─────────────────────────────────┐   │
+│  │ Focus on practical tips.        │   │
+│  │ Mention competitors briefly.    │   │
+│  │ Include a controversial take.   │   │
+│  └─────────────────────────────────┘   │
+│                                         │
+│  ─────────────────────────────────────  │
+│                                         │
+│  [Preview Prompt]      [Save Changes]   │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Node-Specific Panels:**
+
+| Node | Config Options |
+|------|----------------|
+| Trigger | Source type, schedule settings, NicheRadar connection |
+| Script | Model, temperature, structure sections, custom instructions |
+| Voice | Voice selection (with preview), stability, speed, pronunciation guide |
+| Thumbnail | Generator (Gemini/DALL-E), style guide, colors, mood, face settings |
+| Assembly | Resolution, visual source (stock/AI/text cards), caption style, music |
+| Publish | Channel, visibility, schedule time, description template, tags |
+
+---
+
+### INTERVENTION MODAL
+
+**Trigger:** Pipeline pauses at a review point
+
+**Layout:** Large modal (80% viewport) or full-screen
+
+**For Script Review:**
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│  📝 Review Generated Script                          Run: #47 · 2m 34s  │
+│                                                                         │
+│  ┌────────────────────────────────────────────────────────────────────┐│
+│  │                                                                    ││
+│  │  # Top 10 AI Tools That Will Blow Your Mind in 2024               ││
+│  │                                                                    ││
+│  │  ## Hook                                                          ││
+│  │  Welcome back to the channel! Today we're diving into the top     ││
+│  │  10 AI tools that are absolutely changing the game in 2024.       ││
+│  │  Whether you're a developer, content creator, or just someone     ││
+│  │  who wants to be more productive, these tools are going to        ││
+│  │  blow your mind...                                                ││
+│  │                                                                    ││
+│  │  ## Number 10: Cursor IDE                                         ││
+│  │  [Content editable inline - user can modify]                      ││
+│  │                                                                    ││
+│  │  ...                                                              ││
+│  └────────────────────────────────────────────────────────────────────┘│
+│                                                                         │
+│  ┌─────────────────────┐                                               │
+│  │ Stats               │                                               │
+│  │ Words: 1,247        │                                               │
+│  │ Est. Duration: 8:42 │                                               │
+│  │ Sections: 12        │                                               │
+│  └─────────────────────┘                                               │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  Feedback for regeneration (optional)                            │   │
+│  │  ┌─────────────────────────────────────────────────────────┐    │   │
+│  │  │ Make the hook more attention-grabbing, add a question   │    │   │
+│  │  └─────────────────────────────────────────────────────────┘    │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│                                                                         │
+│  [Skip Node]   [🔄 Regenerate]   [✓ Approve & Continue]                │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**For Thumbnail Review:**
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│  🎨 Select Thumbnail                                 Run: #47 · 5m 12s  │
+│                                                                         │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐        │
+│  │                 │  │                 │  │                 │        │
+│  │   Option 1      │  │   Option 2      │  │   Option 3      │        │
+│  │                 │  │                 │  │                 │        │
+│  │    [Image]      │  │    [Image]      │  │    [Image]      │        │
+│  │                 │  │                 │  │                 │        │
+│  │   ○ Select      │  │   ● Selected    │  │   ○ Select      │        │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘        │
+│                                                                         │
+│                                                                         │
+│  [🔄 Generate More]  [✏️ Edit in Studio]   [✓ Use Selected]            │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Actions:**
+- Skip Node — Continue without this node's output
+- Regenerate — Run node again (optionally with feedback)
+- Approve & Continue — Accept output, continue pipeline
+- Edit in Studio — Open Thumbnail Studio for manual editing (thumbnails only)
+
+---
+
+### CHANNEL BIBLE EDITOR
+
+**Location:** Settings page, or dedicated section
+
+**Purpose:** Define brand voice used across all videos
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Channel Bible                                                          │
+│  Define your channel's voice and style                                  │
+│─────────────────────────────────────────────────────────────────────────│
+│                                                                         │
+│  ┌─ Channel Identity ─────────────────────────────────────────────────┐│
+│  │                                                                     ││
+│  │  Channel Name: TechExplained                                       ││
+│  │  Target Audience: Developers, tech enthusiasts, 25-45              ││
+│  │  Content Niche: Programming tutorials, AI tools, tech news         ││
+│  │                                                                     ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+│                                                                         │
+│  ┌─ Tone & Voice ─────────────────────────────────────────────────────┐│
+│  │                                                                     ││
+│  │  Overall Tone                                                       ││
+│  │  ○───────────●─────────○                                           ││
+│  │  Casual              Professional                                   ││
+│  │                                                                     ││
+│  │  Humor Level                                                        ││
+│  │  ○─●───────────────────○                                           ││
+│  │  None                Heavy                                          ││
+│  │                                                                     ││
+│  │  Energy                                                             ││
+│  │  ○─────────●───────────○                                           ││
+│  │  Calm                High                                           ││
+│  │                                                                     ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+│                                                                         │
+│  ┌─ Vocabulary ───────────────────────────────────────────────────────┐│
+│  │                                                                     ││
+│  │  Preferred Terms          Banned Words                              ││
+│  │  ┌─────────────────┐     ┌─────────────────┐                       ││
+│  │  │ AI, ML, LLM     │     │ synergy         │                       ││
+│  │  │ developer       │     │ leverage        │                       ││
+│  │  │ code            │     │ utilize         │                       ││
+│  │  │ ship            │     │ basically       │                       ││
+│  │  └─────────────────┘     └─────────────────┘                       ││
+│  │                                                                     ││
+│  │  Signature Phrases                                                  ││
+│  │  ┌─────────────────────────────────────────────────────────────┐   ││
+│  │  │ "Let's dive in"                                              │   ││
+│  │  │ "Here's the thing..."                                        │   ││
+│  │  │ "If you found this helpful, smash that like button"         │   ││
+│  │  └─────────────────────────────────────────────────────────────┘   ││
+│  │                                                                     ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+│                                                                         │
+│  ┌─ Content Structure ────────────────────────────────────────────────┐│
+│  │                                                                     ││
+│  │  Default Video Length: 8-12 minutes                                ││
+│  │  Hook Style: Question + Bold claim                                  ││
+│  │  CTA Placement: End + Mid-roll reminder                            ││
+│  │                                                                     ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+│                                                                         │
+│  ┌─ Example Scripts ──────────────────────────────────────────────────┐│
+│  │                                                                     ││
+│  │  Paste examples of your best scripts to guide the AI               ││
+│  │  ┌─────────────────────────────────────────────────────────────┐   ││
+│  │  │ [+ Add Example Script]                                       │   ││
+│  │  │                                                              │   ││
+│  │  │ 📄 "Why I Switched to Cursor" — 12:34, uploaded Jan 2024    │   ││
+│  │  │ 📄 "React vs Vue in 2024" — 10:21, uploaded Dec 2023        │   ││
+│  │  └─────────────────────────────────────────────────────────────┘   ││
+│  │                                                                     ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+│                                                                         │
+│                                              [Save Channel Bible]       │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Page-by-Page Requirements
+
+### Dashboard (`/`)
+
+**With Data:**
+- Stats cards (videos published, runs, success rate, costs)
+- Recent runs list with status indicators
+- Quick actions (New Video, Continue Draft, View Templates)
+- Upcoming scheduled runs
+
+**Empty State:**
+- Friendly illustration
+- "Create your first automated video"
+- Quick start wizard or template picker
+
+### Pipeline Editor (`/editor`)
+
+**Core:**
+- React Flow canvas with YouTube watermark
+- Draggable nodes from sidebar
+- Click node → Config panel slides in
+- "Run Pipeline" → Pre-run modal
+
+**Toolbar:**
+- Undo/redo
+- Zoom controls
+- Auto-layout button
+- Save as template
+
+### Run View (`/runs/[id]`)
+
+**During Run:**
+- Visual pipeline with live node status
+- Progress bar
+- Real-time logs (WebSocket)
+- Intervention modal when paused
+
+**After Run:**
+- Final video preview
+- All outputs (script, audio, thumbnail)
+- Cost breakdown
+- YouTube link (if published)
+
+### Thumbnails (`/thumbnails`)
+
+**Layout:** Krea-style (see previous spec)
+- History sidebar (left)
+- Large image grid (center)
+- Prompt input (bottom)
+
+### Settings (`/settings`)
+
+**Sections:**
+- API Keys (with test connection)
+- YouTube Connection (OAuth)
+- Channel Bible (inline or separate page)
+- Defaults (voice, resolution, publish mode)
+- Appearance (theme)
+
+---
+
+## Data Flow Summary
+
+```
+User clicks "Run Pipeline"
+         │
+         ▼
+   ┌─────────────┐
+   │ Pre-Run     │ ← User enters topic, selects archetype
+   │ Modal       │ ← Shows cost estimate
+   └──────┬──────┘
+          │ "Start Run"
+          ▼
+   ┌─────────────┐
+   │ Create Run  │ ← API: POST /api/runs
+   │ in Database │ ← Status: pending
+   └──────┬──────┘
+          │
+          ▼
+   ┌─────────────┐
+   │ Redirect to │
+   │ Run View    │ ← /runs/[id]
+   └──────┬──────┘
+          │
+          ▼
+   ┌─────────────┐
+   │ Orchestrator│ ← Executes nodes in order
+   │ Starts      │ ← WebSocket sends progress
+   └──────┬──────┘
+          │
+     ┌────┴────┐
+     │         │
+     ▼         ▼
+  [Node OK] [Needs Review]
+     │         │
+     │         ▼
+     │    ┌─────────────┐
+     │    │ Intervention│ ← Modal opens
+     │    │ Modal       │ ← User approves/edits
+     │    └──────┬──────┘
+     │           │
+     └─────┬─────┘
+           │
+           ▼
+   ┌─────────────┐
+   │ Pipeline    │
+   │ Completes   │ ← Show results
+   └─────────────┘
+```
+
+---
+
+## Implementation Priority
+
+### Phase 1: Make It Work
+1. Pre-Run Modal (topic + archetype + start)
+2. Intervention Modal (approve/regenerate)
+3. Real-time progress (WebSocket)
+
+### Phase 2: Make It Configurable
+4. Node Config Panels (all 6)
+5. Channel Bible Editor
+6. Settings persistence
+
+### Phase 3: Make It Delightful
+7. Better animations
+8. Keyboard shortcuts
+9. Drag-and-drop improvements
+10. Mobile responsiveness
+
+---
+
+## Technical Notes
+
+### Pre-Run Modal State
+```typescript
+interface PreRunState {
+  topic: string;
+  archetypeId: string;
+  interventionPoints: string[]; // ['script', 'thumbnail']
+  overrides: {
+    voice?: { voiceId: string };
+    duration?: { min: number; max: number };
+    publishMode?: 'draft' | 'private' | 'public';
+  };
+  costEstimate: CostEstimate;
+}
+```
+
+### WebSocket Events
+```typescript
+// Server → Client
+type RunEvent = 
+  | { type: 'node_started'; nodeId: string }
+  | { type: 'node_progress'; nodeId: string; percent: number; message: string }
+  | { type: 'node_completed'; nodeId: string; output: unknown }
+  | { type: 'node_failed'; nodeId: string; error: string }
+  | { type: 'intervention_required'; nodeId: string; output: unknown }
+  | { type: 'run_completed'; outputs: Record<string, unknown> }
+
+// Client → Server
+type InterventionResponse =
+  | { type: 'approve' }
+  | { type: 'approve_with_edits'; edits: unknown }
+  | { type: 'regenerate'; feedback?: string }
+  | { type: 'skip' }
+```
+
+### API Endpoints Needed
+```
+POST /api/runs                    # Create new run
+GET  /api/runs/[id]               # Get run status
+POST /api/runs/[id]/intervention  # Respond to intervention
+WS   /api/runs/[id]/stream        # Real-time updates
+
+GET  /api/archetypes              # List available archetypes
+GET  /api/voices                  # List ElevenLabs voices
+POST /api/voices/preview          # Preview voice
+
+GET  /api/channel-bible           # Get channel bible
+PUT  /api/channel-bible           # Update channel bible
+```
+
+---
+
+Give this to your AI dev. It has everything needed to build the missing UI.

@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+// Re-export UI config types for convenience
+export type {
+  ThumbnailNodeConfig,
+  ThumbnailSource,
+  ThumbnailAspectRatio,
+  ThumbnailMood,
+} from '@/types/nodes/thumbnail';
+
 // === Style Guide ===
 
 export const ThumbnailColorsSchema = z.object({

@@ -17,8 +17,8 @@ describe('deepMerge', () => {
   });
 
   it('recursively merges nested objects', () => {
-    const base = { nested: { a: 1, b: 2 } };
-    const override = { nested: { b: 3, c: 4 } };
+    const base = { nested: { a: 1, b: 2 } } as Record<string, unknown>;
+    const override = { nested: { b: 3, c: 4 } } as Partial<Record<string, unknown>>;
     const result = deepMerge(base, override);
     expect(result.nested).toEqual({ a: 1, b: 3, c: 4 });
   });

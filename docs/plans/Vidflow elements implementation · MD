@@ -1,0 +1,602 @@
+VidFlow Elements & Thumbnail System Implementation
+Overview
+Build an Elements library where users save, tag, and reference images. The Thumbnail node pulls from this library instead of generating randomly.
+Key Features:
+
+Elements Library — Save and tag images
+@Mention System — Reference elements in prompts using @tags
+Thumbnail Studio Integration — Save generated images to Elements
+Thumbnail Node Integration — Use saved elements in pipeline
+
+Image Generation: Gemini Imagen ONLY. No DALL-E, no Flux, no other generators.
+
+Part 1: Database
+Elements Table
+sqlcreate table elements (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
+  
+  name text not null,
+  type text not null check (type in ('face', 'product', 'background', 'style', 'thumbnail')),
+  tags text[] default '{}',
+  
+  storage_path text not null,
+  thumbnail_path text,
+  mime_type text not null,
+  file_size int,
+  
+  metadata jsonb default '{}',
+  
+  used_count int default 0,
+  last_used_at timestamp,
+  
+  created_at timestamp default now(),
+  updated_at timestamp default now()
+);
+
+create index idx_elements_user_id on elements(user_id);
+create index idx_elements_user_type on elements(user_id, type);
+create index idx_elements_tags on elements using gin(tags);
+Supabase Storage
+Create bucket: elements (public or private based on preference)
+Structure:
+elements/{user_id}/{uuid}.{ext}
+elements/{user_id}/thumbs/{uuid}.{ext}  (smaller preview)
+
+Part 2: API Routes
+GET /api/elements
+List user's elements with filtering.
+Query params:
+
+type — Filter by type (face, product, background, style, thumbnail)
+tags — Filter by tags (comma-separated)
+search — Search name and tags
+limit — Results per page (default 20)
+offset — Pagination offset
+
+Response:
+json{
+  "elements": [
+    {
+      "id": "uuid",
+      "name": "Host Excited",
+      "type": "face",
+      "tags": ["@host", "@excited"],
+      "url": "https://storage.../elements/user/abc.png",
+      "thumbnailUrl": "https://storage.../elements/user/thumbs/abc.png",
+      "createdAt": "2026-01-06T..."
+    }
+  ],
+  "total": 45,
+  "hasMore": true
+}
+POST /api/elements
+Upload new element.
+Body: FormData
+
+file — Image file (required)
+name — Display name (required)
+type — Element type (required)
+tags — JSON array of tags (optional)
+metadata — JSON object (optional)
+
+Process:
+
+Validate file (image only, max 10MB)
+Generate UUID
+Upload to Supabase Storage: elements/{user_id}/{uuid}.{ext}
+Generate thumbnail (300px max dimension)
+Upload thumbnail: elements/{user_id}/thumbs/{uuid}.{ext}
+Insert DB record
+Return created element
+
+PUT /api/elements/[id]
+Update element metadata.
+Body:
+json{
+  "name": "New Name",
+  "tags": ["@host", "@casual", "@face"]
+}
+DELETE /api/elements/[id]
+Delete element and storage files.
+POST /api/elements/resolve
+Resolve @tags to element URLs for pipeline use.
+Body:
+json{
+  "tags": ["@host", "@bg-dark"]
+}
+Response:
+json{
+  "resolved": [
+    { "tag": "@host", "id": "uuid", "url": "https://...", "type": "face" },
+    { "tag": "@bg-dark", "id": "uuid", "url": "https://...", "type": "background" }
+  ],
+  "missing": []
+}
+Logic:
+
+For each tag, find element where tags array contains the tag
+If multiple matches, use most recently used (last_used_at)
+Update used_count and last_used_at for resolved elements
+
+GET /api/elements/tags
+List all unique tags the user has used.
+Response:
+json{
+  "tags": ["@host", "@bg-dark", "@product", "@style-neon", "@thumbnail"]
+}
+
+Part 3: Elements Page UI
+Location
+Add to sidebar: "Elements" (between Thumbnails and Settings)
+Route: /elements
+Page Layout
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Elements                                              [+ Upload]       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  [All] [Faces] [Products] [Backgrounds] [Styles] [Thumbnails]          │
+│                                                                         │
+│  🔍 [Search by name or @tag...                              ]          │
+│                                                                         │
+│  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐              │
+│  │           │ │           │ │           │ │           │              │
+│  │   image   │ │   image   │ │   image   │ │   image   │              │
+│  │           │ │           │ │           │ │           │              │
+│  ├───────────┤ ├───────────┤ ├───────────┤ ├───────────┤              │
+│  │ Host Shot │ │ iPhone    │ │ Dark BG   │ │ Thumb v1  │              │
+│  │ @host     │ │ @product  │ │ @bg-dark  │ │ @ai-tools │              │
+│  │ @face     │ │           │ │           │ │           │              │
+│  └───────────┘ └───────────┘ └───────────┘ └───────────┘              │
+│                                                                         │
+│  [Load more...]                                                         │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+Components
+src/components/elements/
+├── ElementsPage.tsx           # Main page
+├── ElementsGrid.tsx           # Grid of cards
+├── ElementCard.tsx            # Single element card
+├── ElementEditModal.tsx       # Edit modal
+├── ElementUploadModal.tsx     # Upload modal
+├── ElementPicker.tsx          # Reusable picker (for node panels)
+├── TagInput.tsx               # Tag input with autocomplete
+└── index.ts
+ElementCard
+Shows:
+
+Thumbnail image
+Name
+Tags (as small badges)
+
+On hover:
+
+Edit button
+Delete button
+
+On click:
+
+Open ElementEditModal
+
+ElementUploadModal
+┌─────────────────────────────────────────────────────────┐
+│  Upload Element                                   [×]   │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │                                                  │   │
+│  │     Drag & drop image here                      │   │
+│  │     or click to browse                          │   │
+│  │                                                  │   │
+│  │     PNG, JPG up to 10MB                         │   │
+│  │                                                  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  Name                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │                                                  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  Type                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Select type...                               ▼  │   │
+│  └─────────────────────────────────────────────────┘   │
+│  • Face — Person's face for thumbnails                 │
+│  • Product — Device, app screenshot, item              │
+│  • Background — Background image or gradient           │
+│  • Style — Reference for AI style matching             │
+│  • Thumbnail — Completed thumbnail for direct use      │
+│                                                         │
+│  Tags                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ [+ Add tag]                                      │   │
+│  └─────────────────────────────────────────────────┘   │
+│  Use @name format (e.g., @host, @bg-dark)              │
+│                                                         │
+│  [Cancel]                              [Upload]         │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+ElementEditModal
+┌─────────────────────────────────────────────────────────┐
+│  Edit Element                                     [×]   │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌─────────────────────────────────────┐               │
+│  │                                     │               │
+│  │         [Image Preview]             │               │
+│  │                                     │               │
+│  └─────────────────────────────────────┘               │
+│                                                         │
+│  Name                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Host - Excited Expression                        │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  Type                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Face                                         ▼  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  Tags                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ [@host] [@face] [@excited]  [+ Add]              │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  Used 12 times · Created Jan 6, 2026                   │
+│                                                         │
+│  [Delete]                              [Save]           │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+ElementPicker (Reusable)
+For use in Thumbnail node panel and other places.
+typescriptinterface ElementPickerProps {
+  type?: string;           // Filter by type
+  value?: string;          // Selected element ID
+  onChange: (id: string | null) => void;
+  placeholder?: string;
+}
+Displays:
+
+Currently selected element (thumbnail + name)
+"Change" button → opens picker modal
+"Clear" button
+
+Picker modal:
+
+Same grid as Elements page
+Click to select
+Search/filter
+
+
+Part 4: @Mention System
+MentionTextarea Component
+A textarea that supports @mentions with autocomplete.
+src/components/ui/MentionTextarea.tsx
+Props:
+typescriptinterface MentionTextareaProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  rows?: number;
+  className?: string;
+}
+Behavior:
+
+Normal textarea behavior for regular text
+When user types @, show autocomplete dropdown
+Dropdown fetches tags from /api/elements/tags
+Filter as user types more characters
+Arrow keys to navigate, Enter to select
+Selected tag inserted into text
+@mentions displayed in accent color (visual only)
+
+Autocomplete dropdown:
+┌────────────────────────────────────┐
+│ @ho                                │
+│   ┌────────────────────────────┐   │
+│   │ @host          [img] face  │   │
+│   │ @horizontal    [img] bg    │   │
+│   └────────────────────────────┘   │
+└────────────────────────────────────┘
+Implementation notes:
+
+Store value as plain text with @tags
+Highlighting is visual/CSS only
+Resolution happens at generation time via /api/elements/resolve
+
+
+Part 5: Thumbnail Studio Integration
+Current State
+
+Images generated via /api/generate
+Stored in browser memory as base64
+Lost on page refresh
+Download button saves locally
+
+Changes Needed
+Add "Save to Elements" button on each generated image.
+UI:
+┌───────────────┐
+│               │
+│    image      │
+│               │
+├───────────────┤
+│  [💾] [⬇️]    │  ← 💾 = Save to Elements, ⬇️ = Download
+└───────────────┘
+Save flow:
+
+Click 💾 button
+Open SaveToElementsModal
+User enters name, selects type, adds tags
+Submit → POST /api/elements with base64 image
+Success toast: "Saved to Elements"
+Can optionally navigate to Elements page
+
+SaveToElementsModal
+┌─────────────────────────────────────────────────────────┐
+│  Save to Elements                                 [×]   │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌─────────────────────────────────────┐               │
+│  │         [Image Preview]             │               │
+│  └─────────────────────────────────────┘               │
+│                                                         │
+│  Save as                                                │
+│  ○ Thumbnail — Ready to use in pipeline                │
+│  ○ Style Reference — Use as generation reference       │
+│  ○ Background — For compositing                        │
+│                                                         │
+│  Name                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ AI Tools Thumbnail v1                            │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  Tags                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ [@thumbnail] [@tech]  [+ Add]                    │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  [Cancel]                              [Save Element]   │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+Store Prompt Metadata
+When saving, include generation metadata:
+json{
+  "prompt": "Dramatic tech review thumbnail with...",
+  "generator": "imagen-3",
+  "aspect_ratio": "16:9",
+  "generated_at": "2026-01-06T..."
+}
+This lets users regenerate similar images later.
+
+Part 6: Thumbnail Node Panel
+Remove Generator Selection
+Gemini Imagen only. No dropdown for DALL-E/Flux.
+New Panel Design
+┌─────────────────────────────────────────────────────────┐
+│  Thumbnail                                         [×]  │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  [Source] [Style]                                       │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  SOURCE TAB:                                            │
+│                                                         │
+│  How should this thumbnail be created?                  │
+│                                                         │
+│  ○ Use existing element                                │
+│    Select a thumbnail you've already created           │
+│                                                         │
+│  ○ Generate with references                            │
+│    Use @elements as references for AI generation       │
+│                                                         │
+│  ○ Generate fresh                                       │
+│    Generate from prompt only (less consistent)         │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  [If "Use existing" selected:]                          │
+│                                                         │
+│  Selected Thumbnail                                     │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │                                                  │   │
+│  │  [No thumbnail selected]                        │   │
+│  │                                                  │   │
+│  │  [Select from Elements]                         │   │
+│  │                                                  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  [If "Generate with references" selected:]              │
+│                                                         │
+│  Prompt (use @ to reference elements)                  │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ @host looking excited, showing @product,        │   │ ← MentionTextarea
+│  │ {title} as text overlay, @bg-gradient           │   │
+│  └─────────────────────────────────────────────────┘   │
+│  Variables: {title} = video title, {topic} = topic     │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  [If "Generate fresh" selected:]                        │
+│                                                         │
+│  Prompt                                                 │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Dramatic YouTube thumbnail for a tech video     │   │
+│  │ about {title}, bold colors, clean design        │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  [Test in Thumbnail Studio]            [Save Config]    │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+STYLE TAB
+│  STYLE TAB:                                             │
+│                                                         │
+│  Aspect Ratio                                           │
+│  ○ 16:9 (YouTube default)                              │
+│  ○ 1:1 (Square)                                        │
+│  ○ 9:16 (Vertical/Shorts)                              │
+│                                                         │
+│  Mood (for generated thumbnails)                       │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Dramatic                                     ▼  │   │
+│  └─────────────────────────────────────────────────┘   │
+│  Options: Dramatic, Playful, Professional, Minimalist  │
+│                                                         │
+Config Schema
+typescriptinterface ThumbnailNodeConfig {
+  source: 'existing' | 'reference' | 'fresh';
+  
+  // If source = 'existing'
+  existingElementId?: string;
+  
+  // If source = 'reference' or 'fresh'
+  prompt?: string;  // May contain @mentions and {variables}
+  
+  // Style
+  aspectRatio: '16:9' | '1:1' | '9:16';
+  mood?: string;
+}
+Runtime Behavior
+If source = 'existing':
+
+Fetch element by ID
+Return element URL as thumbnail
+No generation, no cost
+
+If source = 'reference':
+
+Parse @mentions from prompt
+Call /api/elements/resolve to get reference image URLs
+Replace {title}, {topic} variables with actual values
+Call Gemini Imagen with prompt + reference images
+Return generated image
+
+If source = 'fresh':
+
+Replace {title}, {topic} variables
+Call Gemini Imagen with prompt only
+Return generated image
+
+
+Part 7: File Structure
+src/
+├── app/
+│   ├── elements/
+│   │   └── page.tsx                    # Elements library page
+│   └── api/
+│       └── elements/
+│           ├── route.ts                # GET (list), POST (create)
+│           ├── [id]/
+│           │   └── route.ts            # GET, PUT, DELETE single element
+│           ├── resolve/
+│           │   └── route.ts            # POST resolve @tags
+│           └── tags/
+│               └── route.ts            # GET all tags
+├── components/
+│   ├── elements/
+│   │   ├── ElementsPage.tsx
+│   │   ├── ElementsGrid.tsx
+│   │   ├── ElementCard.tsx
+│   │   ├── ElementEditModal.tsx
+│   │   ├── ElementUploadModal.tsx
+│   │   ├── ElementPicker.tsx
+│   │   ├── SaveToElementsModal.tsx     # For Thumbnail Studio
+│   │   └── index.ts
+│   ├── ui/
+│   │   ├── MentionTextarea.tsx         # @mention autocomplete
+│   │   └── TagInput.tsx                # Tag entry component
+│   └── pipeline/panels/
+│       └── ThumbnailPanel.tsx          # Updated panel
+├── lib/
+│   └── elements/
+│       ├── types.ts                    # Element types
+│       └── utils.ts                    # Helper functions
+└── stores/
+    └── elementsStore.ts                # Zustand store for elements
+
+Part 8: Implementation Order
+Step 1: Database & Storage
+
+ Create elements table migration
+ Create Supabase storage bucket
+ Set up storage policies
+
+Step 2: API Routes
+
+ GET /api/elements (list)
+ POST /api/elements (create with file upload)
+ GET /api/elements/[id]
+ PUT /api/elements/[id]
+ DELETE /api/elements/[id]
+ POST /api/elements/resolve
+ GET /api/elements/tags
+
+Step 3: Elements Page
+
+ ElementsPage.tsx
+ ElementsGrid.tsx
+ ElementCard.tsx
+ ElementUploadModal.tsx
+ ElementEditModal.tsx
+ Add to sidebar navigation
+
+Step 4: @Mention System
+
+ MentionTextarea component
+ Tag autocomplete dropdown
+ Visual highlighting of @mentions
+
+Step 5: Thumbnail Studio Integration
+
+ Add save button to generated images
+ SaveToElementsModal.tsx
+ Wire up to /api/elements
+
+Step 6: Thumbnail Node Panel
+
+ Rewrite ThumbnailPanel.tsx
+ ElementPicker component
+ Three source modes
+ MentionTextarea for prompts
+
+Step 7: Pipeline Integration
+
+ Update Thumbnail node execution
+ Resolve @mentions at runtime
+ Replace {variables}
+ Handle existing vs generated
+
+
+Warnings
+Don't Do These Things
+❌ Don't add other image generators — Gemini Imagen only
+❌ Don't store images in browser — Everything persists to Supabase
+❌ Don't make tags case-sensitive — Normalize to lowercase
+❌ Don't allow duplicate tags per element — Deduplicate on save
+❌ Don't skip thumbnails — Generate previews for fast loading
+❌ Don't forget to update used_count — Track element usage
+Watch Out For
+⚠️ Large file uploads — Limit to 10MB, validate on client and server
+⚠️ Missing elements at runtime — Handle gracefully if @tag doesn't resolve
+⚠️ Race conditions — User might delete element while pipeline is running
+⚠️ Storage costs — Consider cleanup of unused elements
+
+Testing Checklist
+
+ Upload element via modal
+ Tags display correctly on card
+ Search filters by name and tag
+ Type filter works
+ Edit element name and tags
+ Delete element removes from storage too
+ @mention autocomplete appears
+ @mention resolves correctly
+ Save generated thumbnail to Elements
+ Thumbnail panel shows three modes
+ "Use existing" pulls from Elements
+ "Generate with references" resolves @tags
+ Pipeline runs with each thumbnail mode

@@ -17,9 +17,21 @@ import {
   type ThumbnailConfig,
   type ThumbnailOption,
   type ThumbnailStyleGuide,
+  type ThumbnailNodeConfig,
 } from './types';
 import { buildThumbnailPrompt, extractOverlayText } from './prompt-builder';
 import { createGenerator, type GeneratorType, type ThumbnailGenerator } from './generators';
+import {
+  executeThumbnail,
+  convertToLegacyOutput,
+  parseAtMentions,
+  replaceVariables,
+  resolveReferences,
+  getAspectRatioDimensions,
+  buildMoodPrompt,
+  type ThumbnailExecuteInput,
+  type ThumbnailExecuteResult,
+} from './execute';
 
 export class ThumbnailGeneratorNode implements NodeContract<
   typeof ThumbnailInputSchema,
@@ -318,6 +330,43 @@ export class ThumbnailGeneratorNode implements NodeContract<
     }
   }
 
+  // === New Execution with ThumbnailNodeConfig ===
+
+  /**
+   * Execute thumbnail generation using the new ThumbnailNodeConfig format.
+   * Supports three source modes:
+   * - 'existing': Use an already uploaded element
+   * - 'reference': Generate with AI using @mentioned reference images
+   * - 'fresh': Generate with AI using prompt only
+   */
+  async executeWithNodeConfig(
+    nodeConfig: ThumbnailNodeConfig,
+    context: RunContext,
+    options?: ExecutionOptions
+  ): Promise<NodeResult<ThumbnailOutput>> {
+    const result = await executeThumbnail({
+      config: nodeConfig,
+      context,
+      options,
+    });
+
+    if (!result.success) {
+      return result as NodeResult<ThumbnailOutput>;
+    }
+
+    // Convert to legacy ThumbnailOutput format for compatibility
+    const legacyOutput = convertToLegacyOutput(
+      result.output,
+      this.configSchema.parse({}).styleGuide
+    );
+
+    return {
+      success: true,
+      output: legacyOutput,
+      metadata: result.metadata,
+    };
+  }
+
   // === Private Helpers ===
 
   private getCredentialType(generator: GeneratorType): string {
@@ -437,5 +486,19 @@ export class ThumbnailGeneratorNode implements NodeContract<
 
 // Export types and functions
 export type { ThumbnailInput, ThumbnailOutput, ThumbnailConfig, ThumbnailStyleGuide, ThumbnailOption } from './types';
+export type { ThumbnailNodeConfig, ThumbnailSource, ThumbnailAspectRatio, ThumbnailMood } from './types';
 export { buildThumbnailPrompt, extractOverlayText } from './prompt-builder';
 export { createGenerator, type ThumbnailGenerator, type GeneratorType } from './generators';
+
+// Export new execution logic
+export {
+  executeThumbnail,
+  convertToLegacyOutput,
+  parseAtMentions,
+  replaceVariables,
+  resolveReferences,
+  getAspectRatioDimensions,
+  buildMoodPrompt,
+  type ThumbnailExecuteInput,
+  type ThumbnailExecuteResult,
+} from './execute';

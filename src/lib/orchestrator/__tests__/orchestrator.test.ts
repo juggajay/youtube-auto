@@ -2,7 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PipelineOrchestrator } from '../index';
 import { NodeRegistry } from '@/lib/nodes/registry';
 import type { NodeContract } from '@/lib/nodes/base';
+import type { ResolvedConfig } from '@/lib/config/types';
+import type { ConfigSource } from '@/lib/config/resolve';
 import { z } from 'zod';
+
+// Helper to create test config sources with proper typing
+const testConfigSource: ConfigSource = {
+  level: 'project',
+  config: { voice: { voiceId: 'test' }, publish: { channel_id: 'test' } } as Partial<ResolvedConfig>,
+};
 
 // Create a fresh registry for tests
 const testRegistry = new NodeRegistry();
@@ -47,7 +55,7 @@ describe('PipelineOrchestrator', () => {
   it('creates orchestrator with valid params', () => {
     const orchestrator = new PipelineOrchestrator(
       { id: 'test', name: 'Test', nodes: [{ nodeId: 'trigger', id: 'trigger' }] },
-      [{ level: 'project', config: { voice: { voiceId: 'test' }, publish: { channel_id: 'test' } } }],
+      [testConfigSource],
       'user-123',
       'project-456',
       {},
@@ -61,7 +69,7 @@ describe('PipelineOrchestrator', () => {
   it('executes single-node pipeline successfully', async () => {
     const orchestrator = new PipelineOrchestrator(
       { id: 'test', name: 'Test', nodes: [{ nodeId: 'trigger', id: 'trigger' }] },
-      [{ level: 'project', config: { voice: { voiceId: 'test' }, publish: { channel_id: 'test' } } }],
+      [testConfigSource],
       'user-123',
       'project-456',
       {},
@@ -78,7 +86,7 @@ describe('PipelineOrchestrator', () => {
 
     const orchestrator = new PipelineOrchestrator(
       { id: 'test', name: 'Test', nodes: [{ nodeId: 'trigger', id: 'trigger' }] },
-      [{ level: 'project', config: { voice: { voiceId: 'test' }, publish: { channel_id: 'test' } } }],
+      [testConfigSource],
       'user-123',
       'project-456',
       { onProgress: (update) => progressUpdates.push(update) },
@@ -92,7 +100,7 @@ describe('PipelineOrchestrator', () => {
   it('handles node not found error', async () => {
     const orchestrator = new PipelineOrchestrator(
       { id: 'test', name: 'Test', nodes: [{ nodeId: 'nonexistent', id: 'test-node' }] },
-      [{ level: 'project', config: { voice: { voiceId: 'test' }, publish: { channel_id: 'test' } } }],
+      [testConfigSource],
       'user-123',
       'project-456',
       {},
@@ -108,7 +116,7 @@ describe('PipelineOrchestrator', () => {
 
     const orchestrator = new PipelineOrchestrator(
       { id: 'test', name: 'Test', nodes: [{ nodeId: 'trigger', id: 'trigger' }] },
-      [{ level: 'project', config: { voice: { voiceId: 'test' }, publish: { channel_id: 'test' } } }],
+      [testConfigSource],
       'user-123',
       'project-456',
       { signal: controller.signal },
@@ -161,7 +169,7 @@ describe('PipelineOrchestrator', () => {
           { nodeId: 'second', id: 'second', dependsOn: ['trigger'] },
         ],
       },
-      [{ level: 'project', config: { voice: { voiceId: 'test' }, publish: { channel_id: 'test' } } }],
+      [testConfigSource],
       'user-123',
       'project-456',
       {},
@@ -228,7 +236,7 @@ describe('PipelineOrchestrator', () => {
           { nodeId: 'B', id: 'B', dependsOn: ['A'] },
         ],
       },
-      [{ level: 'project', config: { voice: { voiceId: 'test' }, publish: { channel_id: 'test' } } }],
+      [testConfigSource],
       'user-123',
       'project-456',
       {},
@@ -249,7 +257,7 @@ describe('PipelineOrchestrator', () => {
           { nodeId: 'trigger', id: 'B', dependsOn: ['A'] },
         ],
       },
-      [{ level: 'project', config: { voice: { voiceId: 'test' }, publish: { channel_id: 'test' } } }],
+      [testConfigSource],
       'user-123',
       'project-456',
       {},
@@ -307,7 +315,7 @@ describe('PipelineOrchestrator', () => {
           },
         ],
       },
-      [{ level: 'project', config: { voice: { voiceId: 'test' }, publish: { channel_id: 'test' } } }],
+      [testConfigSource],
       'user-123',
       'project-456',
       {},
@@ -324,7 +332,7 @@ describe('PipelineOrchestrator', () => {
 
     const orchestrator = new PipelineOrchestrator(
       { id: 'test', name: 'Test', nodes: [{ nodeId: 'trigger', id: 'trigger' }] },
-      [{ level: 'project', config: { voice: { voiceId: 'test' }, publish: { channel_id: 'test' } } }],
+      [testConfigSource],
       'user-123',
       'project-456',
       {
@@ -343,7 +351,7 @@ describe('PipelineOrchestrator', () => {
   it('provides currentOutput getter', () => {
     const orchestrator = new PipelineOrchestrator(
       { id: 'test', name: 'Test', nodes: [{ nodeId: 'trigger', id: 'trigger' }] },
-      [{ level: 'project', config: { voice: { voiceId: 'test' }, publish: { channel_id: 'test' } } }],
+      [testConfigSource],
       'user-123',
       'project-456',
       {},
@@ -399,7 +407,7 @@ describe('PipelineOrchestrator', () => {
 
     const orchestrator = new PipelineOrchestrator(
       { id: 'test', name: 'Test', nodes: [{ nodeId: 'retryable', id: 'retryable' }] },
-      [{ level: 'project', config: { voice: { voiceId: 'test' }, publish: { channel_id: 'test' } } }],
+      [testConfigSource],
       'user-123',
       'project-456',
       {},
