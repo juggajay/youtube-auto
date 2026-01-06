@@ -454,19 +454,19 @@ body {
 
 /* Pipeline Nodes */
 .pipeline-node {
-  position: absolute;
+  /* position: relative for React Flow measurement */
+  position: relative;
   width: 160px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 12px;
   cursor: move;
-  transition: all 0.2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 .pipeline-node:hover {
-  transform: translateY(-2px);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
 }
 
