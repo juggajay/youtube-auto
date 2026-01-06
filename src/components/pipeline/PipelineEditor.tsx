@@ -321,7 +321,12 @@ function PipelineEditorInner() {
         </div>
 
         {/* Canvas */}
-        <div className="canvas-wrapper" ref={reactFlowWrapper}>
+        <div
+          className="canvas-wrapper"
+          ref={reactFlowWrapper}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+        >
           {/* YouTube Watermark */}
           <div className="youtube-watermark">
             <svg viewBox="0 0 24 24">
@@ -335,8 +340,6 @@ function PipelineEditorInner() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
             nodeTypes={NODE_TYPES}
             edgeTypes={EDGE_TYPES}
             fitView
