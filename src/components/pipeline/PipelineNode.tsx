@@ -9,13 +9,13 @@ export interface PipelineNodeData {
   nodeType: 'trigger' | 'script' | 'voice' | 'thumbnail' | 'assembly' | 'publish'
 }
 
-const NODE_COLORS: Record<string, string> = {
-  trigger: 'var(--node-trigger, #22d3ee)',
-  script: 'var(--node-script, #a78bfa)',
-  voice: 'var(--node-voice, #f472b6)',
-  thumbnail: 'var(--node-thumbnail, #fbbf24)',
-  assembly: 'var(--node-assembly, #34d399)',
-  publish: 'var(--node-publish, #f87171)',
+const NODE_COLORS: Record<string, { color: string; glow: string }> = {
+  trigger: { color: 'var(--node-trigger)', glow: 'var(--node-trigger-glow)' },
+  script: { color: 'var(--node-script)', glow: 'var(--node-script-glow)' },
+  voice: { color: 'var(--node-voice)', glow: 'var(--node-voice-glow)' },
+  thumbnail: { color: 'var(--node-thumbnail)', glow: 'var(--node-thumbnail-glow)' },
+  assembly: { color: 'var(--node-assembly)', glow: 'var(--node-assembly-glow)' },
+  publish: { color: 'var(--node-publish)', glow: 'var(--node-publish-glow)' },
 }
 
 const NODE_ICONS: Record<string, string> = {
@@ -33,7 +33,7 @@ interface PipelineNodeProps {
 }
 
 function PipelineNode({ data, selected }: PipelineNodeProps) {
-  const color = NODE_COLORS[data.nodeType] || '#888'
+  const nodeStyle = NODE_COLORS[data.nodeType] || { color: 'var(--text-muted)', glow: 'transparent' }
   const icon = NODE_ICONS[data.nodeType] || ''
   const hasInput = data.nodeType !== 'trigger'
   const hasOutput = data.nodeType !== 'publish'
@@ -42,57 +42,36 @@ function PipelineNode({ data, selected }: PipelineNodeProps) {
     <div
       className={`pipeline-node ${selected ? 'selected' : ''}`}
       style={{
-        borderLeft: `3px solid ${color}`,
-        background: 'var(--card-bg, #1a1a2e)',
-        borderRadius: '8px',
-        padding: '12px',
-        minWidth: '140px',
-        boxShadow: selected ? `0 0 20px ${color}40` : '0 2px 8px rgba(0,0,0,0.3)',
+        borderLeft: `3px solid ${nodeStyle.color}`,
       }}
     >
       {hasInput && (
         <Handle
           type="target"
           position={Position.Left}
+          className="node-handle input"
           style={{
-            background: color,
-            width: 10,
-            height: 10,
-            border: '2px solid var(--bg, #0f0f1a)',
+            background: 'var(--bg-elevated)',
+            borderColor: 'var(--text-muted)',
           }}
         />
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div className="node-header">
         <div
+          className="node-icon"
           style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '6px',
-            background: color,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: `0 0 15px ${color}60`,
+            background: nodeStyle.color,
+            boxShadow: `0 0 20px ${nodeStyle.glow}`,
           }}
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="white"
-            strokeWidth="2"
-            style={{ width: '16px', height: '16px' }}
-          >
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
             <path d={icon} />
           </svg>
         </div>
         <div>
-          <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text, #fff)' }}>
-            {data.label}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted, #888)' }}>
-            {data.subtitle}
-          </div>
+          <div className="node-title">{data.label}</div>
+          <div className="node-subtitle">{data.subtitle}</div>
         </div>
       </div>
 
@@ -100,11 +79,10 @@ function PipelineNode({ data, selected }: PipelineNodeProps) {
         <Handle
           type="source"
           position={Position.Right}
+          className="node-handle output"
           style={{
-            background: color,
-            width: 10,
-            height: 10,
-            border: '2px solid var(--bg, #0f0f1a)',
+            background: 'var(--bg-elevated)',
+            borderColor: 'var(--text-muted)',
           }}
         />
       )}

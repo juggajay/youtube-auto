@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useMemo, useEffect, useState } from 'react'
+import { useCallback, useRef, useMemo, useState } from 'react'
 import {
   ReactFlow,
   Background,
@@ -14,43 +14,119 @@ import {
   Node,
   ReactFlowProvider,
   useReactFlow,
+  EdgeProps,
+  getBezierPath,
+  BaseEdge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
 import PipelineNode, { PipelineNodeData } from './PipelineNode'
-import { useWorkflowStore } from '@/lib/stores/workflows'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const NODE_TYPES: Record<string, any> = {
   pipeline: PipelineNode,
 }
 
+// Custom edge data type
+interface AnimatedEdgeData {
+  sourceColor?: string
+  targetColor?: string
+}
+
+// Custom animated edge with gradient
+function AnimatedGradientEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  data,
+}: EdgeProps) {
+  const [edgePath] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  })
+
+  const edgeData = data as AnimatedEdgeData | undefined
+  const sourceColor = edgeData?.sourceColor || '#666'
+  const targetColor = edgeData?.targetColor || '#666'
+  const gradientId = `gradient-${id}`
+
+  return (
+    <>
+      <defs>
+        <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor={sourceColor} />
+          <stop offset="100%" stopColor={targetColor} />
+        </linearGradient>
+      </defs>
+      {/* Glow effect */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke={`url(#${gradientId})`}
+        strokeWidth={8}
+        strokeOpacity={0.2}
+        style={{ filter: 'blur(4px)' }}
+      />
+      {/* Main edge */}
+      <BaseEdge
+        id={id}
+        path={edgePath}
+        style={{
+          stroke: `url(#${gradientId})`,
+          strokeWidth: 2,
+          strokeDasharray: '8 4',
+          animation: 'edgeFlow 1s linear infinite',
+        }}
+      />
+    </>
+  )
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const EDGE_TYPES: Record<string, any> = {
+  animated: AnimatedGradientEdge,
+}
+
 const NODE_PALETTE = [
-  { id: 'trigger', name: 'Trigger', subtitle: 'Topic Input', color: '#22d3ee', icon: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z' },
-  { id: 'script', name: 'Script', subtitle: 'Claude AI', color: '#a78bfa', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' },
-  { id: 'voice', name: 'Voice', subtitle: 'ElevenLabs', color: '#f472b6', icon: 'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z' },
-  { id: 'thumbnail', name: 'Thumbnail', subtitle: 'Imagen 4.0', color: '#fbbf24', icon: 'M3 3h18v18H3z' },
-  { id: 'assembly', name: 'Assembly', subtitle: 'FFmpeg', color: '#34d399', icon: 'M23 7l-7 5 7 5V7z' },
-  { id: 'publish', name: 'Publish', subtitle: 'YouTube', color: '#f87171', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' },
+  { id: 'trigger', name: 'Trigger', subtitle: 'Topic Input', color: 'var(--node-trigger)', colorHex: '#06b6d4', icon: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z' },
+  { id: 'script', name: 'Script', subtitle: 'Claude AI', color: 'var(--node-script)', colorHex: '#a855f7', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' },
+  { id: 'voice', name: 'Voice', subtitle: 'ElevenLabs', color: 'var(--node-voice)', colorHex: '#f59e0b', icon: 'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z' },
+  { id: 'thumbnail', name: 'Thumbnail', subtitle: 'Gemini Imagen', color: 'var(--node-thumbnail)', colorHex: '#ec4899', icon: 'M3 3h18v18H3z' },
+  { id: 'assembly', name: 'Assembly', subtitle: 'FFmpeg', color: 'var(--node-assembly)', colorHex: '#10b981', icon: 'M23 7l-7 5 7 5V7z' },
+  { id: 'publish', name: 'Publish', subtitle: 'YouTube', color: 'var(--node-publish)', colorHex: '#ff0000', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' },
 ]
+
+// Get color for node type
+function getNodeColor(nodeType: string): string {
+  const node = NODE_PALETTE.find(n => n.id === nodeType)
+  return node?.colorHex || '#666'
+}
 
 // Default pipeline for demo mode
 const DEFAULT_NODES: Node[] = [
-  { id: 'trigger-1', type: 'pipeline', position: { x: 50, y: 200 }, data: { label: 'Trigger', subtitle: 'Topic Input', nodeType: 'trigger' } },
-  { id: 'script-1', type: 'pipeline', position: { x: 250, y: 200 }, data: { label: 'Script', subtitle: 'Claude AI', nodeType: 'script' } },
-  { id: 'voice-1', type: 'pipeline', position: { x: 450, y: 120 }, data: { label: 'Voice', subtitle: 'ElevenLabs', nodeType: 'voice' } },
-  { id: 'thumbnail-1', type: 'pipeline', position: { x: 450, y: 280 }, data: { label: 'Thumbnail', subtitle: 'Imagen 4.0', nodeType: 'thumbnail' } },
-  { id: 'assembly-1', type: 'pipeline', position: { x: 650, y: 200 }, data: { label: 'Assembly', subtitle: 'FFmpeg', nodeType: 'assembly' } },
-  { id: 'publish-1', type: 'pipeline', position: { x: 850, y: 200 }, data: { label: 'Publish', subtitle: 'YouTube', nodeType: 'publish' } },
+  { id: 'trigger-1', type: 'pipeline', position: { x: 60, y: 175 }, data: { label: 'Trigger', subtitle: 'Topic Input', nodeType: 'trigger' } },
+  { id: 'script-1', type: 'pipeline', position: { x: 300, y: 155 }, data: { label: 'Script', subtitle: 'Claude AI', nodeType: 'script' } },
+  { id: 'voice-1', type: 'pipeline', position: { x: 540, y: 110 }, data: { label: 'Voice', subtitle: 'ElevenLabs', nodeType: 'voice' } },
+  { id: 'thumbnail-1', type: 'pipeline', position: { x: 540, y: 230 }, data: { label: 'Thumbnail', subtitle: 'Gemini Imagen', nodeType: 'thumbnail' } },
+  { id: 'assembly-1', type: 'pipeline', position: { x: 780, y: 175 }, data: { label: 'Assembly', subtitle: 'FFmpeg', nodeType: 'assembly' } },
+  { id: 'publish-1', type: 'pipeline', position: { x: 1020, y: 175 }, data: { label: 'Publish', subtitle: 'YouTube', nodeType: 'publish' } },
 ]
 
 const DEFAULT_EDGES: Edge[] = [
-  { id: 'e1', source: 'trigger-1', target: 'script-1', animated: true, style: { stroke: '#22d3ee' } },
-  { id: 'e2', source: 'script-1', target: 'voice-1', animated: true, style: { stroke: '#a78bfa' } },
-  { id: 'e3', source: 'script-1', target: 'thumbnail-1', animated: true, style: { stroke: '#a78bfa' } },
-  { id: 'e4', source: 'voice-1', target: 'assembly-1', animated: true, style: { stroke: '#f472b6' } },
-  { id: 'e5', source: 'thumbnail-1', target: 'assembly-1', animated: true, style: { stroke: '#fbbf24' } },
-  { id: 'e6', source: 'assembly-1', target: 'publish-1', animated: true, style: { stroke: '#34d399' } },
+  { id: 'e1', source: 'trigger-1', target: 'script-1', type: 'animated', data: { sourceColor: '#06b6d4', targetColor: '#a855f7' } },
+  { id: 'e2', source: 'script-1', target: 'voice-1', type: 'animated', data: { sourceColor: '#a855f7', targetColor: '#f59e0b' } },
+  { id: 'e3', source: 'script-1', target: 'thumbnail-1', type: 'animated', data: { sourceColor: '#a855f7', targetColor: '#ec4899' } },
+  { id: 'e4', source: 'voice-1', target: 'assembly-1', type: 'animated', data: { sourceColor: '#f59e0b', targetColor: '#10b981' } },
+  { id: 'e5', source: 'thumbnail-1', target: 'assembly-1', type: 'animated', data: { sourceColor: '#ec4899', targetColor: '#10b981' } },
+  { id: 'e6', source: 'assembly-1', target: 'publish-1', type: 'animated', data: { sourceColor: '#10b981', targetColor: '#ff0000' } },
 ]
 
 function PipelineEditorInner() {
@@ -59,18 +135,27 @@ function PipelineEditorInner() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState(DEFAULT_NODES)
   const [edges, setEdges, onEdgesChange] = useEdgesState(DEFAULT_EDGES)
-  const [isDirty, setIsDirty] = useState(false)
-
-  // Workflow store for persistence
-  const { currentWorkflow, setNodes: storeSetNodes, setEdges: storeSetEdges, saveWorkflow } = useWorkflowStore()
+  const [isDragging, setIsDragging] = useState(false)
 
   // Handle new connections
   const onConnect = useCallback(
     (params: Connection) => {
-      setEdges((eds) => addEdge({ ...params, animated: true, style: { stroke: '#666' } }, eds))
-      setIsDirty(true)
+      const sourceNode = nodes.find(n => n.id === params.source)
+      const targetNode = nodes.find(n => n.id === params.target)
+      const sourceData = sourceNode?.data as unknown as PipelineNodeData
+      const targetData = targetNode?.data as unknown as PipelineNodeData
+
+      const newEdge = {
+        ...params,
+        type: 'animated',
+        data: {
+          sourceColor: getNodeColor(sourceData?.nodeType || ''),
+          targetColor: getNodeColor(targetData?.nodeType || ''),
+        },
+      }
+      setEdges((eds) => addEdge(newEdge, eds))
     },
-    [setEdges]
+    [setEdges, nodes]
   )
 
   // Handle drag over
@@ -107,20 +192,9 @@ function PipelineEditorInner() {
       }
 
       setNodes((nds) => [...nds, newNode])
-      setIsDirty(true)
     },
     [screenToFlowPosition, setNodes]
   )
-
-  // Handle node deletion
-  const onNodesDelete = useCallback(() => {
-    setIsDirty(true)
-  }, [])
-
-  // Handle edge deletion
-  const onEdgesDelete = useCallback(() => {
-    setIsDirty(true)
-  }, [])
 
   // Auto-layout
   const handleAutoLayout = useCallback(() => {
@@ -134,13 +208,12 @@ function PipelineEditorInner() {
     const layoutedNodes = sortedNodes.map((node, index) => ({
       ...node,
       position: {
-        x: 50 + (index * 200),
-        y: 200 + (index % 2 === 0 ? 0 : 80),
+        x: 60 + (index * 240),
+        y: 175 + (index % 2 === 0 ? 0 : -45),
       },
     }))
 
     setNodes(layoutedNodes)
-    setIsDirty(true)
   }, [nodes, setNodes])
 
   // Fit view
@@ -158,12 +231,13 @@ function PipelineEditorInner() {
   const estimatedCost = useMemo(() => {
     let cost = 0
     nodes.forEach((node) => {
-      switch (node.data.nodeType) {
-        case 'script': cost += 0.10; break
-        case 'voice': cost += 0.15; break
+      const data = node.data as unknown as PipelineNodeData
+      switch (data.nodeType) {
+        case 'script': cost += 0.15; break
+        case 'voice': cost += 0.20; break
         case 'thumbnail': cost += 0.05; break
-        case 'assembly': cost += 0.05; break
-        case 'publish': cost += 0.10; break
+        case 'assembly': cost += 0.03; break
+        case 'publish': cost += 0.02; break
       }
     })
     return cost.toFixed(2)
@@ -231,7 +305,9 @@ function PipelineEditorInner() {
               onDragStart={(event) => {
                 event.dataTransfer.setData('application/reactflow', node.id)
                 event.dataTransfer.effectAllowed = 'move'
+                setIsDragging(true)
               }}
+              onDragEnd={() => setIsDragging(false)}
               style={{ cursor: 'grab' }}
             >
               <div className="palette-node-icon" style={{ background: node.color }}>
@@ -246,6 +322,13 @@ function PipelineEditorInner() {
 
         {/* Canvas */}
         <div className="canvas-wrapper" ref={reactFlowWrapper}>
+          {/* YouTube Watermark */}
+          <div className="youtube-watermark">
+            <svg viewBox="0 0 24 24">
+              <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
+            </svg>
+          </div>
+
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -254,32 +337,76 @@ function PipelineEditorInner() {
             onConnect={onConnect}
             onDrop={onDrop}
             onDragOver={onDragOver}
-            onNodesDelete={onNodesDelete}
-            onEdgesDelete={onEdgesDelete}
             nodeTypes={NODE_TYPES}
+            edgeTypes={EDGE_TYPES}
             fitView
             deleteKeyCode={['Backspace', 'Delete']}
-            style={{ background: 'var(--bg, #0f0f1a)' }}
+            style={{ background: 'transparent' }}
+            proOptions={{ hideAttribution: true }}
           >
-            <Background color="#333" gap={20} />
-            <Controls />
+            <Background
+              color="rgba(255,255,255,0.02)"
+              gap={20}
+              size={1}
+            />
+            <Controls
+              showZoom={true}
+              showFitView={false}
+              showInteractive={false}
+              position="bottom-left"
+            />
             <MiniMap
               nodeColor={(node) => {
-                const colors: Record<string, string> = {
-                  trigger: '#22d3ee',
-                  script: '#a78bfa',
-                  voice: '#f472b6',
-                  thumbnail: '#fbbf24',
-                  assembly: '#34d399',
-                  publish: '#f87171',
-                }
-                return colors[(node.data as unknown as PipelineNodeData)?.nodeType] || '#666'
+                const data = node.data as unknown as PipelineNodeData
+                return getNodeColor(data?.nodeType || '')
               }}
-              style={{ background: '#1a1a2e' }}
+              maskColor="rgba(0,0,0,0.8)"
+              style={{
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+              }}
+              position="bottom-right"
             />
           </ReactFlow>
         </div>
       </div>
+
+      {/* CSS for animated edges */}
+      <style jsx global>{`
+        @keyframes edgeFlow {
+          to { stroke-dashoffset: -12; }
+        }
+        .react-flow__node {
+          cursor: move !important;
+        }
+        .react-flow__controls {
+          background: var(--bg-surface) !important;
+          border: 1px solid var(--border) !important;
+          border-radius: 10px !important;
+          box-shadow: none !important;
+        }
+        .react-flow__controls-button {
+          background: transparent !important;
+          border: none !important;
+          border-bottom: 1px solid var(--border) !important;
+          color: var(--text-secondary) !important;
+          fill: var(--text-secondary) !important;
+        }
+        .react-flow__controls-button:last-child {
+          border-bottom: none !important;
+        }
+        .react-flow__controls-button:hover {
+          background: var(--bg-hover) !important;
+        }
+        .react-flow__controls-button svg {
+          fill: var(--text-secondary) !important;
+        }
+        .react-flow__minimap {
+          border-radius: 10px !important;
+          overflow: hidden !important;
+        }
+      `}</style>
     </div>
   )
 }
