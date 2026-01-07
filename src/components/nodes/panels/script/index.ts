@@ -1,11 +1,7 @@
 // Script Node Panel Components
 export { ScriptPanel } from './ScriptPanel';
-export { ArchetypeTab } from './ArchetypeTab';
-export { StructureTab } from './StructureTab';
-export { HooksTab } from './HooksTab';
-export { TitlesTab } from './TitlesTab';
-export { DescriptionTab } from './DescriptionTab';
-export { TagsTab } from './TagsTab';
-export { AIModelTab } from './AIModelTab';
-export { BibleOverrideTab } from './BibleOverrideTab';
+
+// Simplified 3-tab structure
+export { ContentTab } from './ContentTab';
+export { GenerationTab } from './GenerationTab';
 export { AdvancedTab } from './AdvancedTab';

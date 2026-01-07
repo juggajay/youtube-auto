@@ -12,25 +12,21 @@ const VISUAL_SOURCES = [
     id: 'stock',
     label: 'Stock Footage',
     desc: 'Auto-matched from Pexels, Pixabay, etc.',
-    icon: '🎬',
   },
   {
     id: 'ai-generated',
     label: 'AI Generated',
     desc: 'Create visuals from script descriptions',
-    icon: '🤖',
   },
   {
     id: 'text-cards',
     label: 'Text Cards',
     desc: 'Animated text on backgrounds',
-    icon: '📝',
   },
   {
     id: 'mixed',
     label: 'Mixed',
     desc: 'Combine all sources intelligently',
-    icon: '🎨',
   },
 ] as const;
 
@@ -57,39 +53,44 @@ const TEXT_CARD_STYLES = [
 
 export function VisualSourceTab({ config, onChange }: Props) {
   return (
-    <div className="visual-source-tab">
-      <h4 className="tab-title">Visual Source</h4>
-      <p className="tab-hint">Where should the video visuals come from?</p>
+    <div className="refined-panel">
+      <div className="panel-section">
+        <div className="panel-section-title">Visual Source</div>
+        <p className="panel-section-subtitle">Where should the video visuals come from?</p>
 
-      <div className="source-grid">
-        {VISUAL_SOURCES.map((source) => (
-          <button
-            key={source.id}
-            className={`source-card ${config.visualSource === source.id ? 'selected' : ''}`}
-            onClick={() => onChange({ visualSource: source.id as AssemblyNodeConfig['visualSource'] })}
-          >
-            <span className="source-icon">{source.icon}</span>
-            <span className="source-label">{source.label}</span>
-            <span className="source-desc">{source.desc}</span>
-          </button>
-        ))}
+        <div className="radio-options-grid">
+          {VISUAL_SOURCES.map((source) => (
+            <label
+              key={source.id}
+              className={`radio-option ${config.visualSource === source.id ? 'selected accent-assembly' : ''}`}
+              onClick={() => onChange({ visualSource: source.id as AssemblyNodeConfig['visualSource'] })}
+            >
+              <div className="radio-option-indicator" />
+              <div className="radio-option-content">
+                <span className="radio-option-label">{source.label}</span>
+                <span className="radio-option-description">{source.desc}</span>
+              </div>
+            </label>
+          ))}
+        </div>
       </div>
 
       {/* Stock Provider */}
       {(config.visualSource === 'stock' || config.visualSource === 'mixed') && (
-        <div className="form-group">
-          <label className="form-label">Stock Provider</label>
-          <div className="provider-options">
+        <div className="panel-section">
+          <div className="panel-section-title">Stock Provider</div>
+          <div className="radio-options">
             {STOCK_PROVIDERS.map((provider) => (
-              <label key={provider.id} className="radio-card">
-                <input
-                  type="radio"
-                  name="stockProvider"
-                  checked={config.stockProvider === provider.id}
-                  onChange={() => onChange({ stockProvider: provider.id as AssemblyNodeConfig['stockProvider'] })}
-                />
-                <span className="provider-label">{provider.label}</span>
-                <span className="provider-desc">{provider.desc}</span>
+              <label
+                key={provider.id}
+                className={`radio-option radio-option-compact ${config.stockProvider === provider.id ? 'selected accent-assembly' : ''}`}
+                onClick={() => onChange({ stockProvider: provider.id as AssemblyNodeConfig['stockProvider'] })}
+              >
+                <div className="radio-option-indicator" />
+                <div className="radio-option-content">
+                  <span className="radio-option-label">{provider.label}</span>
+                  <span className="radio-option-description">{provider.desc}</span>
+                </div>
               </label>
             ))}
           </div>
@@ -98,10 +99,10 @@ export function VisualSourceTab({ config, onChange }: Props) {
 
       {/* AI Image Style */}
       {(config.visualSource === 'ai-generated' || config.visualSource === 'mixed') && (
-        <div className="form-group">
-          <label className="form-label">AI Image Style</label>
+        <div className="panel-section">
+          <div className="panel-section-title">AI Image Style</div>
           <select
-            className="form-select"
+            className="panel-select"
             value={config.aiImageStyle}
             onChange={(e) => onChange({ aiImageStyle: e.target.value })}
           >
@@ -116,10 +117,10 @@ export function VisualSourceTab({ config, onChange }: Props) {
 
       {/* Text Card Style */}
       {(config.visualSource === 'text-cards' || config.visualSource === 'mixed') && (
-        <div className="form-group">
-          <label className="form-label">Text Card Style</label>
+        <div className="panel-section">
+          <div className="panel-section-title">Text Card Style</div>
           <select
-            className="form-select"
+            className="panel-select"
             value={config.textCardStyle}
             onChange={(e) => onChange({ textCardStyle: e.target.value })}
           >

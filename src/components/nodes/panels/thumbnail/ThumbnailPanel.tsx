@@ -11,17 +11,9 @@ interface Props {
 
 type TabId = 'source' | 'style';
 
-const TABS: Array<{ id: TabId; label: string; icon: string }> = [
-  {
-    id: 'source',
-    label: 'Source',
-    icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z'
-  },
-  {
-    id: 'style',
-    label: 'Style',
-    icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01'
-  },
+const TABS: Array<{ id: TabId; label: string }> = [
+  { id: 'source', label: 'Source' },
+  { id: 'style', label: 'Style' },
 ];
 
 const SOURCE_OPTIONS: Array<{
@@ -54,12 +46,10 @@ const ASPECT_RATIOS: Array<{
   id: ThumbnailAspectRatio;
   label: string;
   desc: string;
-  width: number;
-  height: number;
 }> = [
-  { id: '16:9', label: '16:9', desc: 'YouTube Standard', width: 160, height: 90 },
-  { id: '1:1', label: '1:1', desc: 'Square', width: 90, height: 90 },
-  { id: '9:16', label: '9:16', desc: 'Vertical/Shorts', width: 56, height: 100 },
+  { id: '16:9', label: '16:9', desc: 'Standard' },
+  { id: '1:1', label: '1:1', desc: 'Square' },
+  { id: '9:16', label: '9:16', desc: 'Vertical' },
 ];
 
 const MOODS: Array<{ id: ThumbnailMood; label: string; desc: string }> = [
@@ -85,112 +75,96 @@ export function ThumbnailPanel({ className = '' }: Props) {
   const estimatedCost = config.source === 'existing' ? 0 : 0.02;
 
   const renderSourceTab = () => (
-    <div className="source-tab space-y-6">
-      <div>
-        <h4 className="text-sm font-medium text-[var(--text-primary)] mb-1">
-          Thumbnail Source
-        </h4>
-        <p className="text-xs text-[var(--text-muted)]">
-          Choose how to get your thumbnail
-        </p>
-      </div>
+    <div className="refined-panel">
+      <div className="panel-section">
+        <div className="panel-section-title">Thumbnail Source</div>
+        <p className="panel-section-subtitle">Choose how to get your thumbnail</p>
 
-      {/* Source Mode Selection */}
-      <div className="source-options space-y-3">
-        {SOURCE_OPTIONS.map((option) => (
-          <label
-            key={option.id}
-            className={`source-option flex items-start p-4 rounded-lg border cursor-pointer transition-all ${
-              config.source === option.id
-                ? 'border-[var(--accent)] bg-[var(--accent)]/10'
-                : 'border-[var(--border)] bg-[var(--bg-secondary)] hover:border-[var(--text-muted)]'
-            }`}
-          >
-            <input
-              type="radio"
-              name="source"
-              className="sr-only"
-              checked={config.source === option.id}
-              onChange={() => handleChange({ source: option.id })}
-            />
-            <div
-              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                config.source === option.id
-                  ? 'border-[var(--accent)]'
-                  : 'border-[var(--text-muted)]'
-              }`}
+        {/* Source Mode Selection */}
+        <div className="radio-options">
+          {SOURCE_OPTIONS.map((option) => (
+            <label
+              key={option.id}
+              className={`radio-option ${config.source === option.id ? 'selected accent-thumbnail' : ''}`}
+              onClick={() => handleChange({ source: option.id })}
             >
-              {config.source === option.id && (
-                <div className="w-2.5 h-2.5 rounded-full bg-[var(--accent)]" />
-              )}
-            </div>
-            <div className="ml-3 flex-1">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-[var(--text-primary)]">
-                  {option.title}
-                </span>
-                <span className="text-xs text-[var(--text-muted)]">
-                  {option.cost}
-                </span>
+              <div className="radio-option-indicator" />
+              <div className="radio-option-content">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span className="radio-option-label">{option.title}</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{option.cost}</span>
+                </div>
+                <span className="radio-option-description">{option.description}</span>
               </div>
-              <span className="text-xs text-[var(--text-muted)]">
-                {option.description}
-              </span>
-            </div>
-          </label>
-        ))}
+            </label>
+          ))}
+        </div>
       </div>
 
       {/* Conditional Content Based on Source Mode */}
-      <div className="source-content mt-6">
+      <div className="panel-section">
         {config.source === 'existing' && (
-          <div className="existing-element-section">
-            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-2">
-              Select Thumbnail Element
-            </label>
+          <>
+            <div className="panel-section-title">Select Element</div>
             <ElementPicker
               value={config.existingElementId}
               onChange={(id) => handleChange({ existingElementId: id || undefined })}
               placeholder="Choose an existing thumbnail..."
             />
-            <p className="text-xs text-[var(--text-muted)] mt-2">
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
               No generation needed - zero cost
             </p>
-          </div>
+          </>
         )}
 
         {config.source === 'reference' && (
-          <div className="reference-section">
-            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-2">
-              Generation Prompt with References
-            </label>
+          <>
+            <div className="panel-section-title">Prompt with References</div>
             <MentionTextarea
               value={config.prompt || ''}
               onChange={(value) => handleChange({ prompt: value })}
               placeholder="@host looking excited, showing @product, {title} as text overlay"
               rows={4}
             />
-            <p className="text-xs text-[var(--text-muted)] mt-2">
-              Variables: <code className="px-1 py-0.5 bg-[var(--bg-elevated)] rounded">{'{title}'}</code> = video title, <code className="px-1 py-0.5 bg-[var(--bg-elevated)] rounded">{'{topic}'}</code> = topic
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+              Variables: <code style={{ padding: '2px 6px', background: 'var(--bg-elevated)', borderRadius: '4px' }}>{'{title}'}</code> = video title, <code style={{ padding: '2px 6px', background: 'var(--bg-elevated)', borderRadius: '4px' }}>{'{topic}'}</code> = topic
             </p>
-          </div>
+          </>
         )}
 
         {config.source === 'fresh' && (
-          <div className="fresh-section">
-            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-2">
-              Generation Prompt
-            </label>
+          <>
+            <div className="panel-section-title">Generation Prompt</div>
             <textarea
               value={config.prompt || ''}
               onChange={(e) => handleChange({ prompt: e.target.value })}
               placeholder="A vibrant YouTube thumbnail showing..."
               rows={4}
-              className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-primary)] text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] resize-none"
+              className="panel-textarea"
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-primary)',
+                fontSize: '14px',
+                resize: 'none',
+                outline: 'none',
+              }}
             />
-            <div className="flex items-start gap-2 mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <div style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px',
+              marginTop: '12px',
+              padding: '12px',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(245, 158, 11, 0.08)',
+              border: '1px solid rgba(245, 158, 11, 0.2)',
+            }}>
               <svg
-                className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5"
+                style={{ width: '16px', height: '16px', color: '#f59e0b', flexShrink: 0, marginTop: '2px' }}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -202,176 +176,176 @@ export function ThumbnailPanel({ className = '' }: Props) {
                   d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                 />
               </svg>
-              <p className="text-xs text-amber-500">
+              <p style={{ fontSize: '12px', color: '#f59e0b', lineHeight: '1.5' }}>
                 Without reference elements, AI-generated thumbnails may be inconsistent with your brand style.
               </p>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>
   );
 
   const renderStyleTab = () => (
-    <div className="style-tab space-y-6">
-      <div>
-        <h4 className="text-sm font-medium text-[var(--text-primary)] mb-1">
-          Style Settings
-        </h4>
-        <p className="text-xs text-[var(--text-muted)]">
-          Configure output format and mood
-        </p>
-      </div>
-
-      {/* Aspect Ratio */}
-      <div className="form-group">
-        <label className="block text-xs font-medium text-[var(--text-secondary)] mb-3">
-          Aspect Ratio
-        </label>
-        <div className="grid grid-cols-3 gap-3">
+    <div className="refined-panel">
+      <div className="panel-section">
+        <div className="panel-section-title">Aspect Ratio</div>
+        <div style={{ display: 'flex', gap: '8px' }}>
           {ASPECT_RATIOS.map((ratio) => (
             <button
               key={ratio.id}
-              className={`aspect-ratio-btn flex flex-col items-center p-3 rounded-lg border transition-all ${
-                config.aspectRatio === ratio.id
-                  ? 'border-[var(--accent)] bg-[var(--accent)]/10'
-                  : 'border-[var(--border)] bg-[var(--bg-secondary)] hover:border-[var(--text-muted)]'
-              }`}
+              className={`panel-btn ${config.aspectRatio === ratio.id ? 'panel-btn-primary' : 'panel-btn-secondary'}`}
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: '12px 8px',
+                gap: '4px',
+                background: config.aspectRatio === ratio.id ? 'var(--node-thumbnail)' : undefined,
+              }}
               onClick={() => handleChange({ aspectRatio: ratio.id })}
             >
-              {/* Visual Preview */}
-              <div
-                className="aspect-preview bg-[var(--border)] rounded mb-2 flex items-center justify-center"
-                style={{
-                  width: ratio.width * 0.6,
-                  height: ratio.height * 0.6,
-                }}
-              >
-                <span className="text-[8px] text-[var(--text-muted)]">{ratio.id}</span>
-              </div>
-              <span className="text-xs font-medium text-[var(--text-primary)]">
-                {ratio.label}
-              </span>
-              <span className="text-[10px] text-[var(--text-muted)]">
-                {ratio.desc}
-              </span>
+              <span style={{ fontWeight: 600, fontSize: '14px' }}>{ratio.label}</span>
+              <span style={{ fontSize: '11px', opacity: 0.7 }}>{ratio.desc}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Mood */}
-      <div className="form-group">
-        <label className="block text-xs font-medium text-[var(--text-secondary)] mb-2">
-          Mood
-        </label>
-        <select
-          value={config.mood || 'dramatic'}
-          onChange={(e) => handleChange({ mood: e.target.value as ThumbnailMood })}
-          className="w-full px-3 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)]"
-        >
-          {MOODS.map((mood) => (
-            <option key={mood.id} value={mood.id}>
-              {mood.label}
-            </option>
-          ))}
-        </select>
+      <div className="panel-section">
+        <div className="panel-section-title">Mood</div>
+        <div className="panel-select-wrapper">
+          <select
+            value={config.mood || 'dramatic'}
+            onChange={(e) => handleChange({ mood: e.target.value as ThumbnailMood })}
+            className="panel-select"
+          >
+            {MOODS.map((mood) => (
+              <option key={mood.id} value={mood.id}>
+                {mood.label}
+              </option>
+            ))}
+          </select>
+        </div>
         {config.mood && (
-          <p className="text-xs text-[var(--text-muted)] mt-2">
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
             {MOODS.find(m => m.id === config.mood)?.desc}
           </p>
         )}
+      </div>
+
+      {/* Cost Estimate */}
+      <div className="panel-section">
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '14px 16px',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Estimated Cost</span>
+          <span style={{
+            fontSize: '16px',
+            fontWeight: 600,
+            color: estimatedCost === 0 ? '#10b981' : 'var(--text-primary)',
+          }}>
+            ${estimatedCost.toFixed(2)}
+          </span>
+        </div>
       </div>
     </div>
   );
 
   return (
-    <div className={`thumbnail-panel flex flex-col h-full bg-[var(--bg-primary)] border-l border-[var(--border)] ${className}`}>
+    <div className={`flex flex-col h-full bg-[var(--bg-surface)] ${className}`}>
       {/* Header */}
-      <div className="panel-header flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[var(--node-thumbnail)] flex items-center justify-center">
-            <svg
-              className="w-4 h-4 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-              Thumbnail
-            </h3>
-            <p className="text-xs text-[var(--text-muted)]">
-              Configure thumbnail generation
-            </p>
-          </div>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        padding: '16px 20px',
+        borderBottom: '1px solid var(--border)',
+      }}>
+        <div style={{
+          width: '32px',
+          height: '32px',
+          borderRadius: '8px',
+          background: 'var(--node-thumbnail)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <svg
+            style={{ width: '16px', height: '16px', color: 'white' }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+          </svg>
+        </div>
+        <div>
+          <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            Thumbnail
+          </h3>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+            Configure thumbnail generation
+          </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="tabs-container flex border-b border-[var(--border)]">
+      <div style={{
+        display: 'flex',
+        borderBottom: '1px solid var(--border)',
+        padding: '0 20px',
+      }}>
         {TABS.map((tab) => (
           <button
             key={tab.id}
-            className={`tab-button flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
-              activeTab === tab.id
-                ? 'border-[var(--accent)] text-[var(--accent)]'
-                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-            }`}
             onClick={() => setActiveTab(tab.id)}
+            style={{
+              padding: '12px 16px',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: activeTab === tab.id ? 'var(--node-thumbnail)' : 'var(--text-muted)',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === tab.id ? '2px solid var(--node-thumbnail)' : '2px solid transparent',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              marginBottom: '-1px',
+            }}
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d={tab.icon}
-              />
-            </svg>
             {tab.label}
           </button>
         ))}
       </div>
 
       {/* Tab Content */}
-      <div className="tab-content flex-1 overflow-y-auto p-4">
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
         {activeTab === 'source' ? renderSourceTab() : renderStyleTab()}
       </div>
 
       {/* Footer */}
-      <div className="panel-footer px-4 py-3 border-t border-[var(--border)] bg-[var(--bg-secondary)]">
-        {/* Cost Estimate */}
-        <div className="flex items-center justify-between mb-3 p-2 rounded-lg bg-[var(--bg-elevated)]">
-          <span className="text-xs text-[var(--text-muted)]">
-            Estimated Cost
-          </span>
-          <span className={`text-sm font-semibold ${estimatedCost === 0 ? 'text-green-500' : 'text-[var(--text-primary)]'}`}>
-            ${estimatedCost.toFixed(2)}
-          </span>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-2">
-          <button
-            className="flex-1 px-4 py-2 text-sm rounded-lg border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
-            onClick={() => window.open('/thumbnails', '_blank')}
-          >
-            Test in Thumbnail Studio
-          </button>
-        </div>
+      <div style={{
+        padding: '16px 20px',
+        borderTop: '1px solid var(--border)',
+        background: 'var(--bg-elevated)',
+      }}>
+        <button
+          className="panel-btn panel-btn-secondary"
+          style={{ width: '100%' }}
+          onClick={() => window.open('/thumbnails', '_blank')}
+        >
+          Test in Thumbnail Studio
+        </button>
       </div>
     </div>
   );

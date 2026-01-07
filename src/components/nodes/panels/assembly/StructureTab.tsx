@@ -23,39 +23,41 @@ const OUTRO_TEMPLATES = [
 ] as const;
 
 const TRANSITION_STYLES = [
-  { id: 'none', label: 'None', desc: 'No transition' },
-  { id: 'cut', label: 'Cut', desc: 'Instant switch' },
-  { id: 'fade', label: 'Fade', desc: 'Smooth crossfade' },
-  { id: 'slide', label: 'Slide', desc: 'Slide animation' },
-  { id: 'zoom', label: 'Zoom', desc: 'Zoom transition' },
+  { id: 'none', label: 'None' },
+  { id: 'cut', label: 'Cut' },
+  { id: 'fade', label: 'Fade' },
+  { id: 'slide', label: 'Slide' },
+  { id: 'zoom', label: 'Zoom' },
 ] as const;
 
 export function StructureTab({ config, onChange }: Props) {
   return (
-    <div className="structure-tab">
-      <h4 className="tab-title">Video Structure</h4>
-      <p className="tab-hint">Configure intro, outro, and transitions</p>
-
+    <div className="refined-panel">
       {/* Intro Section */}
-      <div className="structure-section">
-        <div className="form-group">
-          <label className="toggle-row">
+      <div className="panel-section">
+        <div className="panel-section-title">Intro</div>
+
+        <div className="toggle-row">
+          <div className="toggle-row-content">
+            <span className="toggle-row-label">Include Intro</span>
+            <span className="toggle-row-description">Add an intro sequence to your video</span>
+          </div>
+          <label className="toggle-switch">
             <input
               type="checkbox"
               checked={config.includeIntro}
               onChange={(e) => onChange({ includeIntro: e.target.checked })}
             />
-            <span>Include Intro</span>
+            <span className="toggle-switch-track" />
           </label>
-          <p className="form-hint">Add an intro sequence to your video</p>
         </div>
 
         {config.includeIntro && (
           <>
-            <div className="form-group">
-              <label className="form-label">Intro Template</label>
+            <div style={{ marginTop: '16px' }}>
+              <div className="panel-section-title">Intro Template</div>
               <select
-                className="form-select"
+                className="panel-select"
                 value={config.introTemplate}
                 onChange={(e) => onChange({ introTemplate: e.target.value })}
               >
@@ -67,21 +69,21 @@ export function StructureTab({ config, onChange }: Props) {
               </select>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">
-                Intro Duration
-                <span className="value-badge">{config.introDuration}s</span>
-              </label>
+            <div className="refined-slider-wrapper" style={{ marginTop: '16px' }}>
+              <div className="refined-slider-header">
+                <span className="refined-slider-label">Intro Duration</span>
+                <span className="refined-slider-value">{config.introDuration}s</span>
+              </div>
               <input
                 type="range"
-                className="form-range"
+                className="refined-slider"
                 min={1}
                 max={15}
                 step={1}
                 value={config.introDuration}
                 onChange={(e) => onChange({ introDuration: parseInt(e.target.value) })}
               />
-              <div className="range-labels">
+              <div className="refined-slider-labels">
                 <span>1s</span>
                 <span>15s</span>
               </div>
@@ -91,25 +93,30 @@ export function StructureTab({ config, onChange }: Props) {
       </div>
 
       {/* Outro Section */}
-      <div className="structure-section">
-        <div className="form-group">
-          <label className="toggle-row">
+      <div className="panel-section">
+        <div className="panel-section-title">Outro</div>
+
+        <div className="toggle-row">
+          <div className="toggle-row-content">
+            <span className="toggle-row-label">Include Outro</span>
+            <span className="toggle-row-description">Add an outro sequence with CTAs</span>
+          </div>
+          <label className="toggle-switch">
             <input
               type="checkbox"
               checked={config.includeOutro}
               onChange={(e) => onChange({ includeOutro: e.target.checked })}
             />
-            <span>Include Outro</span>
+            <span className="toggle-switch-track" />
           </label>
-          <p className="form-hint">Add an outro sequence with CTAs</p>
         </div>
 
         {config.includeOutro && (
           <>
-            <div className="form-group">
-              <label className="form-label">Outro Template</label>
+            <div style={{ marginTop: '16px' }}>
+              <div className="panel-section-title">Outro Template</div>
               <select
-                className="form-select"
+                className="panel-select"
                 value={config.outroTemplate}
                 onChange={(e) => onChange({ outroTemplate: e.target.value })}
               >
@@ -121,21 +128,21 @@ export function StructureTab({ config, onChange }: Props) {
               </select>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">
-                Outro Duration
-                <span className="value-badge">{config.outroDuration}s</span>
-              </label>
+            <div className="refined-slider-wrapper" style={{ marginTop: '16px' }}>
+              <div className="refined-slider-header">
+                <span className="refined-slider-label">Outro Duration</span>
+                <span className="refined-slider-value">{config.outroDuration}s</span>
+              </div>
               <input
                 type="range"
-                className="form-range"
+                className="refined-slider"
                 min={5}
                 max={30}
                 step={1}
                 value={config.outroDuration}
                 onChange={(e) => onChange({ outroDuration: parseInt(e.target.value) })}
               />
-              <div className="range-labels">
+              <div className="refined-slider-labels">
                 <span>5s</span>
                 <span>30s</span>
               </div>
@@ -145,41 +152,40 @@ export function StructureTab({ config, onChange }: Props) {
       </div>
 
       {/* Transitions Section */}
-      <div className="structure-section">
-        <h5 className="section-title">Transitions</h5>
+      <div className="panel-section">
+        <div className="panel-section-title">Transitions</div>
 
-        <div className="form-group">
-          <label className="form-label">Transition Style</label>
-          <div className="transition-options">
-            {TRANSITION_STYLES.map((style) => (
-              <button
-                key={style.id}
-                className={`transition-btn ${config.transitionStyle === style.id ? 'selected' : ''}`}
-                onClick={() => onChange({ transitionStyle: style.id as AssemblyNodeConfig['transitionStyle'] })}
-              >
-                <span className="transition-label">{style.label}</span>
-                <span className="transition-desc">{style.desc}</span>
-              </button>
-            ))}
-          </div>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {TRANSITION_STYLES.map((style) => (
+            <button
+              key={style.id}
+              className={`panel-btn panel-btn-sm ${config.transitionStyle === style.id ? 'panel-btn-primary' : 'panel-btn-secondary'}`}
+              style={{
+                background: config.transitionStyle === style.id ? 'var(--node-assembly)' : undefined,
+              }}
+              onClick={() => onChange({ transitionStyle: style.id as AssemblyNodeConfig['transitionStyle'] })}
+            >
+              {style.label}
+            </button>
+          ))}
         </div>
 
         {config.transitionStyle !== 'none' && config.transitionStyle !== 'cut' && (
-          <div className="form-group">
-            <label className="form-label">
-              Transition Duration
-              <span className="value-badge">{config.transitionDuration}ms</span>
-            </label>
+          <div className="refined-slider-wrapper" style={{ marginTop: '16px' }}>
+            <div className="refined-slider-header">
+              <span className="refined-slider-label">Transition Duration</span>
+              <span className="refined-slider-value">{config.transitionDuration}ms</span>
+            </div>
             <input
               type="range"
-              className="form-range"
+              className="refined-slider"
               min={100}
               max={2000}
               step={100}
               value={config.transitionDuration}
               onChange={(e) => onChange({ transitionDuration: parseInt(e.target.value) })}
             />
-            <div className="range-labels">
+            <div className="refined-slider-labels">
               <span>100ms</span>
               <span>2000ms</span>
             </div>

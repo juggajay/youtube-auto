@@ -11,55 +11,12 @@ import { OutputTab } from './OutputTab';
 type TabId = 'visual' | 'structure' | 'captions' | 'music' | 'output';
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'visual', label: 'Visual Source' },
+  { id: 'visual', label: 'Visual' },
   { id: 'structure', label: 'Structure' },
   { id: 'captions', label: 'Captions' },
   { id: 'music', label: 'Music' },
   { id: 'output', label: 'Output' },
 ];
-
-const TAB_ICONS: Record<TabId, React.ReactNode> = {
-  visual: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-      <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
-      <line x1="7" y1="2" x2="7" y2="22" />
-      <line x1="17" y1="2" x2="17" y2="22" />
-      <line x1="2" y1="12" x2="22" y2="12" />
-      <line x1="2" y1="7" x2="7" y2="7" />
-      <line x1="2" y1="17" x2="7" y2="17" />
-      <line x1="17" y1="17" x2="22" y2="17" />
-      <line x1="17" y1="7" x2="22" y2="7" />
-    </svg>
-  ),
-  structure: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-      <polygon points="12 2 2 7 12 12 22 7 12 2" />
-      <polyline points="2 17 12 22 22 17" />
-      <polyline points="2 12 12 17 22 12" />
-    </svg>
-  ),
-  captions: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-      <rect x="2" y="4" width="20" height="16" rx="2" />
-      <line x1="6" y1="12" x2="18" y2="12" />
-      <line x1="6" y1="16" x2="14" y2="16" />
-    </svg>
-  ),
-  music: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-      <path d="M9 18V5l12-2v13" />
-      <circle cx="6" cy="18" r="3" />
-      <circle cx="18" cy="16" r="3" />
-    </svg>
-  ),
-  output: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="15" x2="12" y2="3" />
-    </svg>
-  ),
-};
 
 interface Props {
   className?: string;
@@ -67,7 +24,7 @@ interface Props {
 
 export function AssemblyPanel({ className = '' }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('visual');
-  const { assemblyConfig: config, updateAssemblyConfig } = useNodeConfigStore();
+  const { assemblyConfig: config, updateAssemblyConfig, resetConfig } = useNodeConfigStore();
 
   const handleChange = useCallback(
     (updates: Partial<AssemblyNodeConfig>) => {
@@ -93,45 +50,94 @@ export function AssemblyPanel({ className = '' }: Props) {
     }
   };
 
-  const { resetConfig } = useNodeConfigStore();
-
   return (
-    <div className="assembly-panel">
-      {/* Panel Header */}
-      <div className="panel-header">
-        <div className="panel-title">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+    <div className={`flex flex-col h-full bg-[var(--bg-surface)] ${className}`}>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        padding: '16px 20px',
+        borderBottom: '1px solid var(--border)',
+      }}>
+        <div style={{
+          width: '32px',
+          height: '32px',
+          borderRadius: '8px',
+          background: 'var(--node-assembly)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <svg
+            style={{ width: '16px', height: '16px', color: 'white' }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+          >
             <path d="M23 7l-7 5 7 5V7z" />
             <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
           </svg>
-          <span>Assembly</span>
+        </div>
+        <div>
+          <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            Assembly
+          </h3>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+            Configure video assembly
+          </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="panel-tabs">
+      <div style={{
+        display: 'flex',
+        borderBottom: '1px solid var(--border)',
+        padding: '0 12px',
+        overflowX: 'auto',
+      }}>
         {TABS.map((tab) => (
           <button
             key={tab.id}
-            className={`panel-tab ${activeTab === tab.id ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.id)}
             aria-selected={activeTab === tab.id}
             role="tab"
+            style={{
+              padding: '12px 14px',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: activeTab === tab.id ? 'var(--node-assembly)' : 'var(--text-muted)',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === tab.id ? '2px solid var(--node-assembly)' : '2px solid transparent',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              marginBottom: '-1px',
+              whiteSpace: 'nowrap',
+            }}
           >
-            {TAB_ICONS[tab.id]}
-            <span className="tab-label">{tab.label}</span>
+            {tab.label}
           </button>
         ))}
       </div>
 
       {/* Tab Content */}
-      <div className="panel-content" role="tabpanel">
+      <div role="tabpanel" style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
         {renderTabContent()}
       </div>
 
-      {/* Panel Footer */}
-      <div className="panel-footer">
-        <button className="btn btn-secondary" onClick={() => resetConfig('assembly')}>
+      {/* Footer */}
+      <div style={{
+        padding: '16px 20px',
+        borderTop: '1px solid var(--border)',
+        background: 'var(--bg-elevated)',
+      }}>
+        <button
+          className="panel-btn panel-btn-secondary"
+          style={{ width: '100%' }}
+          onClick={() => resetConfig('assembly')}
+        >
           Reset to Defaults
         </button>
       </div>

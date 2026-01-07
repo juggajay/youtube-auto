@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useNodeConfigStore, type VoiceNodeConfig } from '@/stores/nodeConfigStore';
+import { useNodeConfigStore } from '@/stores/nodeConfigStore';
 import { VoiceSelectionTab } from './VoiceSelectionTab';
 import { SpeechSettingsTab } from './SpeechSettingsTab';
 import { PronunciationTab } from './PronunciationTab';
 import { OutputTab } from './OutputTab';
 
-type TabId = 'voice' | 'speech' | 'pronunciation' | 'output';
+type TabId = 'voice' | 'settings' | 'pronunciation' | 'output';
 
 interface Tab {
   id: TabId;
@@ -15,8 +15,8 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-  { id: 'voice', label: 'Voice Selection' },
-  { id: 'speech', label: 'Speech Settings' },
+  { id: 'voice', label: 'Voice' },
+  { id: 'settings', label: 'Settings' },
   { id: 'pronunciation', label: 'Pronunciation' },
   { id: 'output', label: 'Output' },
 ];
@@ -33,7 +33,7 @@ export function VoicePanel({ className = '' }: Props) {
     switch (activeTab) {
       case 'voice':
         return <VoiceSelectionTab config={config} onChange={onChange} />;
-      case 'speech':
+      case 'settings':
         return <SpeechSettingsTab config={config} onChange={onChange} />;
       case 'pronunciation':
         return <PronunciationTab config={config} onChange={onChange} />;
@@ -45,20 +45,23 @@ export function VoicePanel({ className = '' }: Props) {
   };
 
   return (
-    <div className="voice-panel">
-      <div className="panel-header">
-        <h3>Voice Configuration</h3>
-        {config.voiceName && (
-          <span className="selected-voice">Selected: {config.voiceName}</span>
-        )}
+    <div className={`refined-panel refined-panel-flush ${className}`}>
+      {/* Header */}
+      <div className="panel-header-bar accent-voice">
+        <div className="panel-header-content">
+          <h3 className="panel-header-title">Voice Configuration</h3>
+          {config.voiceName && (
+            <span className="panel-header-badge accent-voice">{config.voiceName}</span>
+          )}
+        </div>
       </div>
 
       {/* Tab Navigation */}
-      <div className="tab-nav">
+      <div className="panel-tab-nav">
         {TABS.map((tab) => (
           <button
             key={tab.id}
-            className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+            className={`panel-tab-btn ${activeTab === tab.id ? 'active accent-voice' : ''}`}
             onClick={() => setActiveTab(tab.id)}
           >
             {tab.label}
@@ -67,7 +70,7 @@ export function VoicePanel({ className = '' }: Props) {
       </div>
 
       {/* Tab Content */}
-      <div className="tab-content">
+      <div className="panel-tab-content">
         {renderTabContent()}
       </div>
     </div>

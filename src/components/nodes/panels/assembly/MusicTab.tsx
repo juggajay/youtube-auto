@@ -37,14 +37,11 @@ export function MusicTab({ config, onChange }: Props) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    // Fetch music library
     fetchTracks();
   }, []);
 
   const fetchTracks = async () => {
     setIsLoading(true);
-    // TODO: Implement actual music library API
-    // Simulating API delay
     await new Promise((resolve) => setTimeout(resolve, 500));
     setTracks(MOCK_TRACKS);
     setIsLoading(false);
@@ -64,9 +61,7 @@ export function MusicTab({ config, onChange }: Props) {
     } else {
       if (audioRef.current) {
         audioRef.current.src = previewUrl;
-        audioRef.current.play().catch(() => {
-          // Handle autoplay restrictions
-        });
+        audioRef.current.play().catch(() => {});
       }
       setPlayingId(trackId);
     }
@@ -75,9 +70,7 @@ export function MusicTab({ config, onChange }: Props) {
   const selectedTrack = tracks.find((t) => t.id === config.musicTrackId);
 
   return (
-    <div className="music-tab">
-      <h4 className="tab-title">Background Music</h4>
-
+    <div className="refined-panel">
       {/* Hidden audio element for previews */}
       <audio
         ref={audioRef}
@@ -86,36 +79,49 @@ export function MusicTab({ config, onChange }: Props) {
       />
 
       {/* Enable Music */}
-      <div className="form-group">
-        <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={config.includeMusic}
-            onChange={(e) => onChange({ includeMusic: e.target.checked })}
-          />
-          <span>Include background music</span>
-        </label>
-        <p className="form-hint">Add background music to enhance your video</p>
+      <div className="panel-section">
+        <div className="toggle-row">
+          <div className="toggle-row-content">
+            <span className="toggle-row-label">Include Music</span>
+            <span className="toggle-row-description">Add background music to enhance your video</span>
+          </div>
+          <label className="toggle-switch">
+            <input
+              type="checkbox"
+              checked={config.includeMusic}
+              onChange={(e) => onChange({ includeMusic: e.target.checked })}
+            />
+            <span className="toggle-switch-track" />
+          </label>
+        </div>
       </div>
 
       {config.includeMusic && (
         <>
           {/* Search and Filter */}
-          <div className="music-filters">
-            <div className="form-group">
+          <div className="panel-section">
+            <div style={{ display: 'flex', gap: '8px' }}>
               <input
                 type="text"
-                className="form-input"
                 placeholder="Search music..."
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px',
+                  outline: 'none',
+                }}
               />
-            </div>
-            <div className="form-group">
               <select
-                className="form-select"
+                className="panel-select panel-select-sm"
                 value={moodFilter}
                 onChange={(e) => setMoodFilter(e.target.value)}
+                style={{ width: '140px' }}
               >
                 {MOOD_FILTERS.map((mood) => (
                   <option key={mood.value} value={mood.value}>
@@ -128,129 +134,202 @@ export function MusicTab({ config, onChange }: Props) {
 
           {/* Selected Track Display */}
           {selectedTrack && (
-            <div className="selected-track">
-              <div className="selected-label">Selected:</div>
-              <div className="selected-info">
-                <span className="track-name">{selectedTrack.name}</span>
-                <span className="track-artist">{selectedTrack.artist}</span>
+            <div className="panel-section">
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                background: 'rgba(16, 185, 129, 0.08)',
+                border: '1px solid rgba(16, 185, 129, 0.2)',
+                borderRadius: 'var(--radius-md)',
+              }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {selectedTrack.name}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {selectedTrack.artist}
+                  </div>
+                </div>
+                <button
+                  className="panel-btn panel-btn-sm panel-btn-ghost"
+                  onClick={() => onChange({ musicTrackId: undefined })}
+                >
+                  Clear
+                </button>
               </div>
-              <button
-                className="clear-btn"
-                onClick={() => onChange({ musicTrackId: undefined })}
-              >
-                Clear
-              </button>
             </div>
           )}
 
           {/* Track List */}
-          <div className="track-list">
-            {isLoading ? (
-              <div className="loading-state">Loading tracks...</div>
-            ) : filteredTracks.length === 0 ? (
-              <div className="empty-state">No tracks found</div>
-            ) : (
-              filteredTracks.map((track) => (
-                <div
-                  key={track.id}
-                  className={`track-item ${config.musicTrackId === track.id ? 'selected' : ''}`}
-                  onClick={() => onChange({ musicTrackId: track.id })}
-                >
-                  <button
-                    className="preview-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePlayPause(track.id, track.previewUrl);
-                    }}
-                    aria-label={playingId === track.id ? 'Pause' : 'Play'}
-                  >
-                    {playingId === track.id ? (
-                      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                        <rect x="6" y="4" width="4" height="16" />
-                        <rect x="14" y="4" width="4" height="16" />
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                        <polygon points="5,3 19,12 5,21" />
-                      </svg>
-                    )}
-                  </button>
-                  <div className="track-info">
-                    <span className="track-name">{track.name}</span>
-                    <span className="track-artist">{track.artist}</span>
-                  </div>
-                  <span className="track-mood">{track.mood}</span>
-                  <span className="track-duration">{track.duration}</span>
+          <div className="panel-section">
+            <div className="panel-section-title">Available Tracks</div>
+            <div style={{
+              maxHeight: '200px',
+              overflowY: 'auto',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+            }}>
+              {isLoading ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  Loading tracks...
                 </div>
-              ))
-            )}
+              ) : filteredTracks.length === 0 ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  No tracks found
+                </div>
+              ) : (
+                filteredTracks.map((track, index) => (
+                  <div
+                    key={track.id}
+                    onClick={() => onChange({ musicTrackId: track.id })}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '10px 12px',
+                      cursor: 'pointer',
+                      background: config.musicTrackId === track.id ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
+                      borderBottom: index < filteredTracks.length - 1 ? '1px solid var(--border)' : 'none',
+                      transition: 'background 0.15s ease',
+                    }}
+                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePlayPause(track.id, track.previewUrl);
+                      }}
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-elevated)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                      aria-label={playingId === track.id ? 'Pause' : 'Play'}
+                    >
+                      {playingId === track.id ? (
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" style={{ color: 'var(--text-primary)' }}>
+                          <rect x="6" y="4" width="4" height="16" />
+                          <rect x="14" y="4" width="4" height="16" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" style={{ color: 'var(--text-primary)' }}>
+                          <polygon points="5,3 19,12 5,21" />
+                        </svg>
+                      )}
+                    </button>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                        {track.name}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        {track.artist}
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: '11px',
+                      color: 'var(--text-muted)',
+                      padding: '2px 6px',
+                      background: 'var(--bg-elevated)',
+                      borderRadius: '4px',
+                    }}>
+                      {track.mood}
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                      {track.duration}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
           {/* Volume */}
-          <div className="form-group">
-            <label className="form-label">
-              Volume
-              <span className="value-badge">{config.musicVolume}%</span>
-            </label>
-            <input
-              type="range"
-              className="form-range"
-              min={0}
-              max={100}
-              value={config.musicVolume}
-              onChange={(e) => onChange({ musicVolume: parseInt(e.target.value) })}
-            />
+          <div className="panel-section">
+            <div className="refined-slider-wrapper">
+              <div className="refined-slider-header">
+                <span className="refined-slider-label">Volume</span>
+                <span className="refined-slider-value">{config.musicVolume}%</span>
+              </div>
+              <input
+                type="range"
+                className="refined-slider"
+                min={0}
+                max={100}
+                value={config.musicVolume}
+                onChange={(e) => onChange({ musicVolume: parseInt(e.target.value) })}
+              />
+            </div>
           </div>
 
           {/* Fade Options */}
-          <div className="form-row fade-options">
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={config.musicFadeIn}
-                onChange={(e) => onChange({ musicFadeIn: e.target.checked })}
-              />
-              <span>Fade In</span>
-            </label>
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={config.musicFadeOut}
-                onChange={(e) => onChange({ musicFadeOut: e.target.checked })}
-              />
-              <span>Fade Out</span>
-            </label>
+          <div className="panel-section">
+            <div className="panel-section-title">Fade Options</div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div className="toggle-inline" style={{ flex: 1 }}>
+                <span className="toggle-inline-label">Fade In</span>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={config.musicFadeIn}
+                    onChange={(e) => onChange({ musicFadeIn: e.target.checked })}
+                  />
+                  <span className="toggle-switch-track" />
+                </label>
+              </div>
+              <div className="toggle-inline" style={{ flex: 1 }}>
+                <span className="toggle-inline-label">Fade Out</span>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={config.musicFadeOut}
+                    onChange={(e) => onChange({ musicFadeOut: e.target.checked })}
+                  />
+                  <span className="toggle-switch-track" />
+                </label>
+              </div>
+            </div>
           </div>
 
           {/* Ducking */}
-          <div className="ducking-section">
-            <div className="form-group">
-              <label className="toggle-row">
+          <div className="panel-section">
+            <div className="toggle-row">
+              <div className="toggle-row-content">
+                <span className="toggle-row-label">Auto-duck during speech</span>
+                <span className="toggle-row-description">Lower music volume when voice is speaking</span>
+              </div>
+              <label className="toggle-switch">
                 <input
                   type="checkbox"
                   checked={config.ducking}
                   onChange={(e) => onChange({ ducking: e.target.checked })}
                 />
-                <span>Auto-duck during speech</span>
+                <span className="toggle-switch-track" />
               </label>
-              <p className="form-hint">Lower music volume when voice is speaking</p>
             </div>
 
             {config.ducking && (
-              <div className="form-group">
-                <label className="form-label">
-                  Duck Amount
-                  <span className="value-badge">{config.duckingAmount}%</span>
-                </label>
+              <div className="refined-slider-wrapper" style={{ marginTop: '16px' }}>
+                <div className="refined-slider-header">
+                  <span className="refined-slider-label">Duck Amount</span>
+                  <span className="refined-slider-value">{config.duckingAmount}%</span>
+                </div>
                 <input
                   type="range"
-                  className="form-range"
+                  className="refined-slider"
                   min={20}
                   max={80}
                   value={config.duckingAmount}
                   onChange={(e) => onChange({ duckingAmount: parseInt(e.target.value) })}
                 />
-                <div className="range-labels">
+                <div className="refined-slider-labels">
                   <span>20% (subtle)</span>
                   <span>80% (aggressive)</span>
                 </div>

@@ -4,82 +4,52 @@ import { create } from 'zustand';
 // SCRIPT NODE CONFIG
 // =============================================================================
 
-export type ScriptSectionType = 'hook' | 'intro' | 'point' | 'story' | 'transition' | 'cta' | 'outro';
-export type HookStyle = 'question' | 'statistic' | 'story' | 'controversy' | 'promise';
-export type HookTone = 'dramatic' | 'conversational' | 'mysterious';
-export type ScriptModel = 'claude-sonnet' | 'claude-opus' | 'gpt-4' | 'gpt-4-turbo';
+// Content source types for the simplified panel
+export type ContentSource = 'library' | 'generate';
+export type DescriptionSource = 'library' | 'template' | 'generate';
+export type TargetDuration = 'short' | 'standard' | 'long' | 'custom';
+export type ScriptModel = 'claude-sonnet-4' | 'claude-opus-4';
+export type Archetype = 'tutorial' | 'listicle' | 'explainer' | 'news' | 'review' | 'vs-battle' | 'story';
 
-// Content Library integration
-export type ContentSourceMode = 'saved' | 'examples' | 'fresh';
-
-export interface ScriptSection {
-  id: string;
-  name: string;
-  type: ScriptSectionType;
-  duration: string; // e.g., "30s", "2m"
-  instructions: string;
-  required: boolean;
-}
-
-export interface ChannelBibleOverride {
-  tone?: string;
-  vocabulary?: string[];
-  bannedWords?: string[];
-  targetAudience?: string;
-  brandVoice?: string;
+// Script section flags for advanced options
+export interface ScriptSections {
+  hook: boolean;
+  introduction: boolean;
+  mainContent: boolean;
+  conclusion: boolean;
+  callToAction: boolean;
 }
 
 export interface ScriptNodeConfig {
-  // Archetype
-  archetypeId: string;
-  archetypeOverrides?: Record<string, unknown>;
+  // Content Tab
+  hookSource: ContentSource;
+  hookContentId?: string;
 
-  // Structure
-  sections: ScriptSection[];
-  allowReorder: boolean;
+  titleSource: ContentSource;
+  titleContentId?: string;
 
-  // Hooks
-  hookSourceMode: ContentSourceMode;
-  selectedHookIds: string[]; // IDs from content library
-  hooksToGenerate: number; // 1-5
-  hookStyle: HookStyle;
-  hookTone: HookTone;
+  descriptionSource: DescriptionSource;
+  descriptionContentId?: string;
+  descriptionTemplate?: string;
 
-  // Titles
-  titleSourceMode: ContentSourceMode;
-  selectedTitleIds: string[]; // IDs from content library
-  titlesToGenerate: number; // 1-10
-  titlePatterns: string[];
-  powerWords: string[];
-  titleMaxLength: number;
-
-  // Description
-  descriptionSourceMode: ContentSourceMode;
-  selectedDescriptionId: string | null; // ID from content library
-  descriptionTemplate: string;
-  descriptionVariables: Record<string, string>;
-  includeTimestamps: boolean;
-  includeLinks: boolean;
-
-  // Tags
-  autoExtractTags: boolean;
+  autoGenerateTags: boolean;
   requiredTags: string[];
-  bannedTags: string[];
-  maxTags: number;
 
-  // AI Model
+  // Generation Tab
+  archetype: Archetype;
+  targetDuration: TargetDuration;
+  customDurationMin?: number;
+  customDurationMax?: number;
   model: ScriptModel;
-  temperature: number; // 0-1
-  maxTokens: number;
+  temperature: number; // 0.3 to 1.0
+  useChannelBible: boolean;
 
-  // Bible Override
-  useBible: boolean;
-  bibleOverrides: ChannelBibleOverride;
-
-  // Advanced
-  systemPromptAddition: string;
-  debugMode: boolean;
-  rawOutput: boolean;
+  // Advanced Tab
+  sections: ScriptSections;
+  customInstructions?: string;
+  includeTimestamps: boolean;
+  includeSectionHeaders: boolean;
+  includeBrollSuggestions: boolean;
 }
 
 // =============================================================================
@@ -247,38 +217,46 @@ export interface PublishNodeConfig {
 // =============================================================================
 
 const defaultScriptConfig: ScriptNodeConfig = {
-  archetypeId: '',
-  sections: [],
-  allowReorder: true,
-  hookSourceMode: 'fresh',
-  selectedHookIds: [],
-  hooksToGenerate: 3,
-  hookStyle: 'question',
-  hookTone: 'conversational',
-  titleSourceMode: 'fresh',
-  selectedTitleIds: [],
-  titlesToGenerate: 5,
-  titlePatterns: ['how-to', 'number-list'],
-  powerWords: ['Secret', 'Ultimate', 'Proven'],
-  titleMaxLength: 60,
-  descriptionSourceMode: 'fresh',
-  selectedDescriptionId: null,
-  descriptionTemplate: '',
-  descriptionVariables: {},
-  includeTimestamps: true,
-  includeLinks: true,
-  autoExtractTags: true,
+  // Content Tab
+  hookSource: 'generate',
+  hookContentId: undefined,
+  titleSource: 'generate',
+  titleContentId: undefined,
+  descriptionSource: 'generate',
+  descriptionContentId: undefined,
+  descriptionTemplate: `{intro}
+
+Timestamps:
+{timestamps}
+
+Links:
+{links}
+
+{cta}`,
+  autoGenerateTags: true,
   requiredTags: [],
-  bannedTags: [],
-  maxTags: 15,
-  model: 'claude-sonnet',
+
+  // Generation Tab
+  archetype: 'tutorial',
+  targetDuration: 'standard',
+  customDurationMin: undefined,
+  customDurationMax: undefined,
+  model: 'claude-sonnet-4',
   temperature: 0.7,
-  maxTokens: 4000,
-  useBible: true,
-  bibleOverrides: {},
-  systemPromptAddition: '',
-  debugMode: false,
-  rawOutput: false,
+  useChannelBible: true,
+
+  // Advanced Tab
+  sections: {
+    hook: true,
+    introduction: true,
+    mainContent: true,
+    conclusion: true,
+    callToAction: true,
+  },
+  customInstructions: undefined,
+  includeTimestamps: true,
+  includeSectionHeaders: true,
+  includeBrollSuggestions: false,
 };
 
 const defaultVoiceConfig: VoiceNodeConfig = {
@@ -388,16 +366,8 @@ export interface NodeConfigState {
   // Actions - Script Config
   updateScriptConfig: (updates: Partial<ScriptNodeConfig>) => void;
   setScriptConfig: (config: ScriptNodeConfig) => void;
-  addScriptSection: (section: ScriptSection) => void;
-  updateScriptSection: (id: string, updates: Partial<ScriptSection>) => void;
-  removeScriptSection: (id: string) => void;
-  reorderScriptSections: (sections: ScriptSection[]) => void;
-  addPowerWord: (word: string) => void;
-  removePowerWord: (word: string) => void;
   addRequiredTag: (tag: string) => void;
   removeRequiredTag: (tag: string) => void;
-  addBannedTag: (tag: string) => void;
-  removeBannedTag: (tag: string) => void;
 
   // Actions - Voice Config
   updateVoiceConfig: (updates: Partial<VoiceNodeConfig>) => void;
@@ -490,93 +460,6 @@ export const useNodeConfigStore = create<NodeConfigState>((set, get) => ({
       };
     }),
 
-  addScriptSection: (section) =>
-    set((state) => {
-      const newDirtyNodes = new Set(state.dirtyNodes);
-      newDirtyNodes.add('script');
-      return {
-        scriptConfig: {
-          ...state.scriptConfig,
-          sections: [...state.scriptConfig.sections, section],
-        },
-        isDirty: true,
-        dirtyNodes: newDirtyNodes,
-      };
-    }),
-
-  updateScriptSection: (id, updates) =>
-    set((state) => {
-      const newDirtyNodes = new Set(state.dirtyNodes);
-      newDirtyNodes.add('script');
-      return {
-        scriptConfig: {
-          ...state.scriptConfig,
-          sections: state.scriptConfig.sections.map((s) =>
-            s.id === id ? { ...s, ...updates } : s
-          ),
-        },
-        isDirty: true,
-        dirtyNodes: newDirtyNodes,
-      };
-    }),
-
-  removeScriptSection: (id) =>
-    set((state) => {
-      const newDirtyNodes = new Set(state.dirtyNodes);
-      newDirtyNodes.add('script');
-      return {
-        scriptConfig: {
-          ...state.scriptConfig,
-          sections: state.scriptConfig.sections.filter((s) => s.id !== id),
-        },
-        isDirty: true,
-        dirtyNodes: newDirtyNodes,
-      };
-    }),
-
-  reorderScriptSections: (sections) =>
-    set((state) => {
-      const newDirtyNodes = new Set(state.dirtyNodes);
-      newDirtyNodes.add('script');
-      return {
-        scriptConfig: {
-          ...state.scriptConfig,
-          sections,
-        },
-        isDirty: true,
-        dirtyNodes: newDirtyNodes,
-      };
-    }),
-
-  addPowerWord: (word) =>
-    set((state) => {
-      if (state.scriptConfig.powerWords.includes(word)) return state;
-      const newDirtyNodes = new Set(state.dirtyNodes);
-      newDirtyNodes.add('script');
-      return {
-        scriptConfig: {
-          ...state.scriptConfig,
-          powerWords: [...state.scriptConfig.powerWords, word],
-        },
-        isDirty: true,
-        dirtyNodes: newDirtyNodes,
-      };
-    }),
-
-  removePowerWord: (word) =>
-    set((state) => {
-      const newDirtyNodes = new Set(state.dirtyNodes);
-      newDirtyNodes.add('script');
-      return {
-        scriptConfig: {
-          ...state.scriptConfig,
-          powerWords: state.scriptConfig.powerWords.filter((w) => w !== word),
-        },
-        isDirty: true,
-        dirtyNodes: newDirtyNodes,
-      };
-    }),
-
   addRequiredTag: (tag) =>
     set((state) => {
       if (state.scriptConfig.requiredTags.includes(tag)) return state;
@@ -600,35 +483,6 @@ export const useNodeConfigStore = create<NodeConfigState>((set, get) => ({
         scriptConfig: {
           ...state.scriptConfig,
           requiredTags: state.scriptConfig.requiredTags.filter((t) => t !== tag),
-        },
-        isDirty: true,
-        dirtyNodes: newDirtyNodes,
-      };
-    }),
-
-  addBannedTag: (tag) =>
-    set((state) => {
-      if (state.scriptConfig.bannedTags.includes(tag)) return state;
-      const newDirtyNodes = new Set(state.dirtyNodes);
-      newDirtyNodes.add('script');
-      return {
-        scriptConfig: {
-          ...state.scriptConfig,
-          bannedTags: [...state.scriptConfig.bannedTags, tag],
-        },
-        isDirty: true,
-        dirtyNodes: newDirtyNodes,
-      };
-    }),
-
-  removeBannedTag: (tag) =>
-    set((state) => {
-      const newDirtyNodes = new Set(state.dirtyNodes);
-      newDirtyNodes.add('script');
-      return {
-        scriptConfig: {
-          ...state.scriptConfig,
-          bannedTags: state.scriptConfig.bannedTags.filter((t) => t !== tag),
         },
         isDirty: true,
         dirtyNodes: newDirtyNodes,

@@ -1,11 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import type { PublishPanelConfig, YouTubePlaylist } from '@/types/nodes/publish';
+import type { PublishNodeConfig } from '@/stores/nodeConfigStore';
+
+interface YouTubePlaylist {
+  id: string;
+  title: string;
+  itemCount: number;
+}
 
 interface Props {
-  config: PublishPanelConfig;
-  onChange: (updates: Partial<PublishPanelConfig>) => void;
+  config: PublishNodeConfig;
+  onChange: (updates: Partial<PublishNodeConfig>) => void;
 }
 
 const CATEGORIES = [
@@ -55,116 +61,219 @@ export function AdvancedTab({ config, onChange }: Props) {
 
   return (
     <div className="advanced-tab">
-      <h4>Advanced Settings</h4>
-
-      {/* Category */}
-      <div className="form-group">
-        <label>Category</label>
-        <select
-          value={config.category}
-          onChange={(e) => onChange({ category: e.target.value })}
-        >
-          {CATEGORIES.map((cat) => (
-            <option key={cat.id} value={cat.id}>{cat.label}</option>
-          ))}
-        </select>
+      {/* Category & Language */}
+      <div className="panel-section">
+        <div className="panel-section-title">Classification</div>
+        <div className="select-grid">
+          <div className="panel-select-wrapper">
+            <label className="panel-select-label">Category</label>
+            <select
+              className="panel-select"
+              value={config.category}
+              onChange={(e) => onChange({ category: e.target.value })}
+            >
+              {CATEGORIES.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="panel-select-wrapper">
+            <label className="panel-select-label">Language</label>
+            <select
+              className="panel-select"
+              value={config.language}
+              onChange={(e) => onChange({ language: e.target.value })}
+            >
+              {LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
-      {/* Language */}
-      <div className="form-group">
-        <label>Video Language</label>
-        <select
-          value={config.language}
-          onChange={(e) => onChange({ language: e.target.value })}
-        >
-          {LANGUAGES.map((lang) => (
-            <option key={lang.code} value={lang.code}>{lang.label}</option>
-          ))}
-        </select>
+      {/* Compliance */}
+      <div className="panel-section">
+        <div className="panel-section-title">Compliance</div>
+
+        <div className="toggle-row">
+          <div className="toggle-row-content">
+            <div className="toggle-row-label">Made for kids</div>
+            <div className="toggle-row-description">Content made specifically for children</div>
+          </div>
+          <label className="toggle-switch accent-publish">
+            <input
+              type="checkbox"
+              checked={config.madeForKids}
+              onChange={(e) => onChange({ madeForKids: e.target.checked })}
+            />
+            <span className="toggle-switch-track" />
+          </label>
+        </div>
+
+        {config.madeForKids && (
+          <div className="panel-info-box warning">
+            <div className="panel-info-box-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </div>
+            <div className="panel-info-box-content">
+              <div className="panel-info-box-title">Important</div>
+              <div className="panel-info-box-text">
+                Setting this incorrectly can result in account penalties. Only enable if your content is specifically made for children.
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="toggle-row">
+          <div className="toggle-row-content">
+            <div className="toggle-row-label">Age-restricted (18+)</div>
+            <div className="toggle-row-description">Contains mature content</div>
+          </div>
+          <label className="toggle-switch accent-publish">
+            <input
+              type="checkbox"
+              checked={config.ageRestricted}
+              onChange={(e) => onChange({ ageRestricted: e.target.checked })}
+            />
+            <span className="toggle-switch-track" />
+          </label>
+        </div>
       </div>
 
-      {/* Audience */}
-      <div className="form-group">
-        <label>Audience</label>
-        <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={config.madeForKids}
-            onChange={(e) => onChange({ madeForKids: e.target.checked })}
-          />
-          <span>Made for kids</span>
-        </label>
-        <p className="hint warning">Warning: Setting this incorrectly can result in account penalties</p>
+      {/* Engagement */}
+      <div className="panel-section">
+        <div className="panel-section-title">Engagement</div>
 
-        <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={config.ageRestricted}
-            onChange={(e) => onChange({ ageRestricted: e.target.checked })}
-          />
-          <span>Age-restricted (18+)</span>
-        </label>
+        <div className="toggle-row">
+          <div className="toggle-row-content">
+            <div className="toggle-row-label">Allow comments</div>
+            <div className="toggle-row-description">Let viewers comment on this video</div>
+          </div>
+          <label className="toggle-switch accent-publish">
+            <input
+              type="checkbox"
+              checked={config.allowComments}
+              onChange={(e) => onChange({ allowComments: e.target.checked })}
+            />
+            <span className="toggle-switch-track" />
+          </label>
+        </div>
+
+        <div className="toggle-row">
+          <div className="toggle-row-content">
+            <div className="toggle-row-label">Show likes</div>
+            <div className="toggle-row-description">Display like count on video</div>
+          </div>
+          <label className="toggle-switch accent-publish">
+            <input
+              type="checkbox"
+              checked={config.allowRatings}
+              onChange={(e) => onChange({ allowRatings: e.target.checked })}
+            />
+            <span className="toggle-switch-track" />
+          </label>
+        </div>
       </div>
 
-      {/* Interactions */}
-      <div className="form-group">
-        <label>Interactions</label>
-        <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={config.allowComments}
-            onChange={(e) => onChange({ allowComments: e.target.checked })}
-          />
-          <span>Allow comments</span>
-        </label>
-        <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={config.allowRatings}
-            onChange={(e) => onChange({ allowRatings: e.target.checked })}
-          />
-          <span>Show likes</span>
-        </label>
-      </div>
+      {/* Video Type */}
+      <div className="panel-section">
+        <div className="panel-section-title">Video Type</div>
 
-      {/* Shorts */}
-      <div className="form-group">
-        <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={config.isShort}
-            onChange={(e) => onChange({ isShort: e.target.checked })}
-          />
-          <span>This is a Short</span>
-        </label>
-        <p className="hint">Enable for vertical videos under 60 seconds</p>
+        <div className="toggle-row">
+          <div className="toggle-row-content">
+            <div className="toggle-row-label">This is a Short</div>
+            <div className="toggle-row-description">Vertical video under 60 seconds</div>
+          </div>
+          <label className="toggle-switch accent-publish">
+            <input
+              type="checkbox"
+              checked={config.isShort}
+              onChange={(e) => onChange({ isShort: e.target.checked })}
+            />
+            <span className="toggle-switch-track" />
+          </label>
+        </div>
       </div>
 
       {/* Playlist */}
-      <div className="form-group">
-        <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={config.addToPlaylist}
-            onChange={(e) => onChange({ addToPlaylist: e.target.checked })}
-          />
-          <span>Add to playlist</span>
-        </label>
+      <div className="panel-section">
+        <div className="panel-section-title">Playlist</div>
+
+        <div className="toggle-row">
+          <div className="toggle-row-content">
+            <div className="toggle-row-label">Add to playlist</div>
+            <div className="toggle-row-description">Automatically add to a playlist</div>
+          </div>
+          <label className="toggle-switch accent-publish">
+            <input
+              type="checkbox"
+              checked={config.addToPlaylist}
+              onChange={(e) => onChange({ addToPlaylist: e.target.checked })}
+            />
+            <span className="toggle-switch-track" />
+          </label>
+        </div>
+
         {config.addToPlaylist && (
-          <select
-            value={config.playlistId || ''}
-            onChange={(e) => onChange({ playlistId: e.target.value })}
-            disabled={loadingPlaylists}
-          >
-            <option value="">Select playlist...</option>
-            {playlists.map((playlist) => (
-              <option key={playlist.id} value={playlist.id}>
-                {playlist.title} ({playlist.itemCount} videos)
-              </option>
-            ))}
-          </select>
+          <div className="panel-select-wrapper playlist-select">
+            <select
+              className="panel-select"
+              value={config.playlistId || ''}
+              onChange={(e) => onChange({ playlistId: e.target.value })}
+              disabled={loadingPlaylists}
+            >
+              <option value="">Select playlist...</option>
+              {playlists.map((playlist) => (
+                <option key={playlist.id} value={playlist.id}>
+                  {playlist.title} ({playlist.itemCount} videos)
+                </option>
+              ))}
+            </select>
+            {loadingPlaylists && (
+              <span className="panel-input-hint">Loading playlists...</span>
+            )}
+            {!loadingPlaylists && !config.channelId && (
+              <span className="panel-input-hint">Select a channel first</span>
+            )}
+          </div>
         )}
       </div>
+
+      <style jsx>{`
+        .advanced-tab {
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
+        }
+
+        .select-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+        }
+
+        .toggle-row + .toggle-row {
+          margin-top: 8px;
+        }
+
+        .toggle-row + .panel-info-box {
+          margin-top: 12px;
+          margin-bottom: 4px;
+        }
+
+        .playlist-select {
+          margin-top: 12px;
+        }
+      `}</style>
     </div>
   );
 }

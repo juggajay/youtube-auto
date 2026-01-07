@@ -14,13 +14,13 @@ export type {
 
 // Re-export types from nodeConfigStore
 export type {
-  // Script types
-  ScriptSectionType,
-  HookStyle,
-  HookTone,
+  // Script types (simplified)
+  ContentSource,
+  DescriptionSource,
+  TargetDuration,
   ScriptModel,
-  ScriptSection,
-  ChannelBibleOverride,
+  Archetype,
+  ScriptSections,
   ScriptNodeConfig,
   // Voice types
   VoiceProvider,

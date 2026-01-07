@@ -8,112 +8,136 @@ interface Props {
 }
 
 export function SpeechSettingsTab({ config, onChange }: Props) {
-  return (
-    <div className="speech-settings-tab">
-      <h4>Speech Settings</h4>
+  // Calculate slider progress for visual feedback
+  const getSpeedProgress = () => ((config.speed - 0.5) / 1.5) * 100;
 
-      {/* Speed */}
-      <div className="form-group">
-        <label>
-          Speed
-          <span className="value-badge">{config.speed.toFixed(1)}x</span>
-        </label>
+  return (
+    <div className="panel-section">
+      {/* Speed Slider */}
+      <div className="refined-slider-wrapper">
+        <div className="refined-slider-header">
+          <span className="refined-slider-label">Speed</span>
+          <span className="refined-slider-value">{config.speed.toFixed(1)}x</span>
+        </div>
         <input
           type="range"
+          className="refined-slider accent-voice"
           min={0.5}
           max={2.0}
           step={0.1}
           value={config.speed}
           onChange={(e) => onChange({ speed: parseFloat(e.target.value) })}
+          style={{ '--progress': `${getSpeedProgress()}%` } as React.CSSProperties}
         />
-        <div className="range-labels">
-          <span>Slow (0.5x)</span>
-          <span>Normal (1x)</span>
-          <span>Fast (2x)</span>
+        <div className="refined-slider-labels">
+          <span>0.5x</span>
+          <span>1.0x</span>
+          <span>2.0x</span>
         </div>
       </div>
 
-      {/* Stability */}
-      <div className="form-group">
-        <label>
-          Stability
-          <span className="value-badge">{Math.round(config.stability * 100)}%</span>
-        </label>
+      {/* Stability Slider */}
+      <div className="refined-slider-wrapper">
+        <div className="refined-slider-header">
+          <span className="refined-slider-label">Stability</span>
+          <span className="refined-slider-value">{Math.round(config.stability * 100)}%</span>
+        </div>
         <input
           type="range"
+          className="refined-slider accent-voice"
           min={0}
           max={1}
           step={0.05}
           value={config.stability}
           onChange={(e) => onChange({ stability: parseFloat(e.target.value) })}
+          style={{ '--progress': `${config.stability * 100}%` } as React.CSSProperties}
         />
-        <div className="range-labels">
+        <div className="refined-slider-labels">
           <span>Variable</span>
           <span>Stable</span>
         </div>
-        <p className="hint">Higher = more consistent, Lower = more expressive</p>
+        <p className="panel-hint">Higher stability = more consistent, lower = more expressive</p>
       </div>
 
-      {/* Clarity + Similarity Enhancement */}
-      <div className="form-group">
-        <label>
-          Clarity
-          <span className="value-badge">{Math.round(config.clarity * 100)}%</span>
-        </label>
+      {/* Clarity Slider */}
+      <div className="refined-slider-wrapper">
+        <div className="refined-slider-header">
+          <span className="refined-slider-label">Clarity</span>
+          <span className="refined-slider-value">{Math.round(config.clarity * 100)}%</span>
+        </div>
         <input
           type="range"
+          className="refined-slider accent-voice"
           min={0}
           max={1}
           step={0.05}
           value={config.clarity}
           onChange={(e) => onChange({ clarity: parseFloat(e.target.value) })}
+          style={{ '--progress': `${config.clarity * 100}%` } as React.CSSProperties}
         />
-        <div className="range-labels">
+        <div className="refined-slider-labels">
           <span>Natural</span>
           <span>Enhanced</span>
         </div>
       </div>
 
-      {/* Style Exaggeration */}
-      <div className="form-group">
-        <label>
-          Style Intensity
-          <span className="value-badge">{Math.round(config.styleExaggeration * 100)}%</span>
-        </label>
+      {/* Style Exaggeration Slider */}
+      <div className="refined-slider-wrapper">
+        <div className="refined-slider-header">
+          <span className="refined-slider-label">Style Intensity</span>
+          <span className="refined-slider-value">{Math.round(config.styleExaggeration * 100)}%</span>
+        </div>
         <input
           type="range"
+          className="refined-slider accent-voice"
           min={0}
           max={1}
           step={0.05}
           value={config.styleExaggeration}
           onChange={(e) => onChange({ styleExaggeration: parseFloat(e.target.value) })}
+          style={{ '--progress': `${config.styleExaggeration * 100}%` } as React.CSSProperties}
         />
-        <div className="range-labels">
+        <div className="refined-slider-labels">
           <span>Subtle</span>
           <span>Dramatic</span>
         </div>
-        <p className="hint">How much the voice adapts to the emotional content</p>
+        <p className="panel-hint">How much the voice adapts to emotional content</p>
       </div>
 
       {/* Presets */}
-      <div className="presets">
-        <h5>Quick Presets</h5>
-        <div className="preset-buttons">
+      <div className="panel-section">
+        <h4 className="panel-section-title">Quick Presets</h4>
+        <div className="panel-btn-group">
           <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => onChange({ stability: 0.5, clarity: 0.75, styleExaggeration: 0.3 })}
+            className="panel-btn panel-btn-secondary panel-btn-sm"
+            onClick={() => onChange({
+              stability: 0.5,
+              clarity: 0.75,
+              styleExaggeration: 0.3,
+              speed: 1.0
+            })}
           >
             Conversational
           </button>
           <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => onChange({ stability: 0.7, clarity: 0.9, styleExaggeration: 0.5 })}
+            className="panel-btn panel-btn-secondary panel-btn-sm"
+            onClick={() => onChange({
+              stability: 0.7,
+              clarity: 0.9,
+              styleExaggeration: 0.5,
+              speed: 0.95
+            })}
           >
             Professional
           </button>
           <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => onChange({ stability: 0.3, clarity: 0.6, styleExaggeration: 0.8 })}
+            className="panel-btn panel-btn-secondary panel-btn-sm"
+            onClick={() => onChange({
+              stability: 0.3,
+              clarity: 0.6,
+              styleExaggeration: 0.8,
+              speed: 1.1
+            })}
           >
             Dramatic
           </button>

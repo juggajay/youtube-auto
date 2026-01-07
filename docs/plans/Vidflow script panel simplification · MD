@@ -1,0 +1,436 @@
+# Script Node Panel Simplification
+
+## Context
+
+Now that Ideation Studio exists for brainstorming hooks, titles, and descriptions, the Script Node panel no longer needs all that configuration. It should be simplified to just reference saved content or configure runtime generation.
+
+**Before:** 9 tabs (Format, Structure, Hooks, Titles, Description, Tags, Tone, AI Model, Advanced)
+
+**After:** 3 tabs (Content, Generation, Advanced)
+
+---
+
+## READ FIRST — Required Skills & Styling
+
+**Before building any UI components, read:**
+```
+/mnt/skills/public/frontend-design/SKILL.md
+```
+
+**Follow existing VidFlow styling:**
+- Background: `bg-zinc-950` / `bg-zinc-900`
+- Border: `border-zinc-800`
+- Accent: `#ef4444` (red)
+- Generous spacing: `p-6`, `space-y-4`
+- Match existing node panels
+
+---
+
+## New Panel Structure
+
+### Tab 1: Content
+
+**Purpose:** Select where each content piece comes from — Content Library or generated at runtime.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Script Node                                       [×]  │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  [Content] [Generation] [Advanced]                      │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  Hook                                                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ ○ Use from Content Library                       │   │
+│  │ ○ Generate at runtime                            │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  [If "Use from Content Library" selected:]              │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Select hook...                               ▼  │   │
+│  └─────────────────────────────────────────────────┘   │
+│  Shows ContentPicker filtered to type="hook"           │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  Title                                                  │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ ○ Use from Content Library                       │   │
+│  │ ○ Generate at runtime                            │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  [If "Use from Content Library" selected:]              │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Select title...                              ▼  │   │
+│  └─────────────────────────────────────────────────┘   │
+│  Shows ContentPicker filtered to type="title"          │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  Description                                            │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ ○ Use from Content Library                       │   │
+│  │ ○ Use template                                   │   │
+│  │ ○ Generate at runtime                            │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  [If "Use from Content Library" selected:]              │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Select description...                        ▼  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  [If "Use template" selected:]                          │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ {intro}                                          │   │
+│  │                                                  │   │
+│  │ ⏱️ Timestamps:                                   │   │
+│  │ {timestamps}                                     │   │
+│  │                                                  │   │
+│  │ 🔗 Links:                                        │   │
+│  │ {links}                                          │   │
+│  │                                                  │   │
+│  │ {cta}                                            │   │
+│  └─────────────────────────────────────────────────┘   │
+│  Editable template with variable placeholders          │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  Tags                                                   │
+│  ☑ Auto-generate from content                          │
+│                                                         │
+│  Required tags (always included):                      │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ [+ Add tag]                                      │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ 💡 No saved content?                             │   │
+│  │    Create hooks, titles & descriptions in        │   │
+│  │    Ideation Studio first.                        │   │
+│  │                                                  │   │
+│  │    [Open Ideation Studio →]                      │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Tab 2: Generation
+
+**Purpose:** Configure how content is generated at runtime (when not using saved content).
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Script Node                                       [×]  │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  [Content] [Generation] [Advanced]                      │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  Video Format                                           │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Tutorial                                     ▼  │   │
+│  └─────────────────────────────────────────────────┘   │
+│  Options: Tutorial, Listicle, Explainer, News,         │
+│           Review, VS Battle, Story                      │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  Target Duration                                        │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ 8-12 minutes (Standard)                      ▼  │   │
+│  └─────────────────────────────────────────────────┘   │
+│  Options: 3-5 min (Short), 8-12 min (Standard),        │
+│           15-20 min (Long), Custom                      │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  AI Model                                               │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ ○ Claude Sonnet 4 (Recommended)                  │   │
+│  │   Fast, high quality, cost-effective             │   │
+│  │                                                  │   │
+│  │ ○ Claude Opus 4                                  │   │
+│  │   Highest quality, slower, higher cost           │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  Creativity                                             │
+│  Focused ○───────────●───────────○ Creative            │
+│          0.3        0.7          1.0                   │
+│                                                         │
+│  Lower = more consistent, Higher = more varied         │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  Channel Bible                                          │
+│  ☑ Use Channel Bible for tone and style                │
+│                                                         │
+│  [Channel Bible not configured? Set it up →]           │
+│  Links to /settings#channel-bible                      │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Tab 3: Advanced
+
+**Purpose:** Additional configuration for power users.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Script Node                                       [×]  │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  [Content] [Generation] [Advanced]                      │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  Script Structure                                       │
+│  Select which sections to include:                     │
+│                                                         │
+│  ☑ Hook (15-30 sec)                                    │
+│  ☑ Introduction (30-60 sec)                            │
+│  ☑ Main Content (varies by duration)                   │
+│  ☑ Conclusion (30-60 sec)                              │
+│  ☑ Call to Action (15-30 sec)                          │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  Custom Instructions                                    │
+│  Additional guidance for the AI:                       │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │                                                  │   │
+│  │ e.g., "Include a controversial take in the      │   │
+│  │ middle section" or "Mention competitor X"       │   │
+│  │                                                  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  Output Options                                         │
+│  ☑ Include timestamps in script                        │
+│  ☑ Generate section headers                            │
+│  ☐ Include B-roll suggestions                          │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Config Schema
+
+Update the Script Node config to match the simplified structure:
+
+```typescript
+interface ScriptNodeConfig {
+  // Content Tab
+  hookSource: 'library' | 'generate';
+  hookContentId?: string;  // If source = 'library'
+  
+  titleSource: 'library' | 'generate';
+  titleContentId?: string;  // If source = 'library'
+  
+  descriptionSource: 'library' | 'template' | 'generate';
+  descriptionContentId?: string;  // If source = 'library'
+  descriptionTemplate?: string;   // If source = 'template'
+  
+  autoGenerateTags: boolean;
+  requiredTags: string[];
+  
+  // Generation Tab
+  archetype: string;       // tutorial, listicle, explainer, etc.
+  targetDuration: string;  // short, standard, long, custom
+  customDurationMin?: number;
+  customDurationMax?: number;
+  
+  model: 'claude-sonnet-4' | 'claude-opus-4';
+  temperature: number;  // 0.3 to 1.0
+  
+  useChannelBible: boolean;
+  
+  // Advanced Tab
+  sections: {
+    hook: boolean;
+    introduction: boolean;
+    mainContent: boolean;
+    conclusion: boolean;
+    callToAction: boolean;
+  };
+  
+  customInstructions?: string;
+  
+  includeTimestamps: boolean;
+  includeSectionHeaders: boolean;
+  includeBrollSuggestions: boolean;
+}
+```
+
+---
+
+## Implementation Steps
+
+### Step 1: Backup Current Panel
+- Copy current ScriptPanel.tsx to ScriptPanel.old.tsx (for reference)
+
+### Step 2: Create New Panel Structure
+```
+src/components/nodes/panels/script/
+├── ScriptPanel.tsx          # Main panel with 3 tabs
+├── ContentTab.tsx           # Tab 1: Content sources
+├── GenerationTab.tsx        # Tab 2: Generation settings  
+├── AdvancedTab.tsx          # Tab 3: Advanced options
+└── index.ts
+```
+
+### Step 3: Update Store
+- Update `nodeConfigStore.ts` with new `ScriptNodeConfig` interface
+- Remove old fields (hookStyles, hookCount, titleCount, etc.)
+- Add new fields matching schema above
+
+### Step 4: Build ContentTab
+- Radio buttons for each content type (Hook, Title, Description)
+- ContentPicker integration (reuse from Elements)
+- Template editor for description
+- Tags section with auto-generate toggle
+- "Open Ideation Studio" link at bottom
+
+### Step 5: Build GenerationTab
+- Archetype dropdown
+- Duration dropdown
+- Model radio buttons
+- Temperature slider
+- Channel Bible checkbox with link to settings
+
+### Step 6: Build AdvancedTab
+- Section checkboxes
+- Custom instructions textarea
+- Output options checkboxes
+
+### Step 7: Wire Up ContentPicker
+- Filter by type (hook, title, description)
+- Show selected content preview
+- Clear button to deselect
+
+### Step 8: Update Script Node Execution
+- Check content source for each piece
+- If 'library': fetch from Content Library by ID
+- If 'template': use template with variable replacement
+- If 'generate': run AI generation with config
+
+---
+
+## Files to Modify
+
+```
+DELETE (or archive):
+- Old complex tab files if they exist separately
+
+CREATE:
+- src/components/nodes/panels/script/ScriptPanel.tsx
+- src/components/nodes/panels/script/ContentTab.tsx
+- src/components/nodes/panels/script/GenerationTab.tsx
+- src/components/nodes/panels/script/AdvancedTab.tsx
+- src/components/nodes/panels/script/index.ts
+
+MODIFY:
+- src/stores/nodeConfigStore.ts (update ScriptNodeConfig)
+- src/lib/nodes/script/execute.ts (handle content sources)
+```
+
+---
+
+## ContentPicker Component
+
+If not already built, create a reusable ContentPicker:
+
+```typescript
+interface ContentPickerProps {
+  type: 'hook' | 'title' | 'description' | 'intro' | 'cta';
+  value?: string;           // Selected content ID
+  onChange: (id: string | null, content?: ContentItem) => void;
+  placeholder?: string;
+}
+```
+
+**Behavior:**
+1. Shows dropdown/button to open picker modal
+2. If value is set, shows preview of selected content
+3. Picker modal lists content filtered by type
+4. Search within modal
+5. Click to select, returns ID and content object
+6. Clear button to deselect
+
+---
+
+## Links to Other Features
+
+### Ideation Studio Link
+```tsx
+<Link href="/ideation" className="text-red-500 hover:text-red-400">
+  Open Ideation Studio →
+</Link>
+```
+
+### Channel Bible Link
+```tsx
+<Link href="/settings#channel-bible" className="text-zinc-400 hover:text-zinc-300">
+  Set up Channel Bible →
+</Link>
+```
+
+---
+
+## Testing Checklist
+
+- [ ] Content Tab displays correctly
+- [ ] Can select "Use from Content Library" for hook
+- [ ] ContentPicker opens and shows hooks only
+- [ ] Can select a hook, preview shows
+- [ ] Can clear selection
+- [ ] Same works for title and description
+- [ ] "Use template" shows template editor
+- [ ] Template variables work
+- [ ] Tags auto-generate toggle works
+- [ ] Generation Tab displays correctly
+- [ ] Archetype dropdown works
+- [ ] Duration dropdown works
+- [ ] Model selection works
+- [ ] Temperature slider works
+- [ ] Channel Bible toggle works
+- [ ] Advanced Tab displays correctly
+- [ ] Section checkboxes work
+- [ ] Custom instructions saves
+- [ ] Output options toggle
+- [ ] Config saves to store
+- [ ] Config persists on panel close/reopen
+- [ ] Script node execution uses correct content source
+- [ ] Library content fetched correctly at runtime
+- [ ] Generated content works when no library content selected
+
+---
+
+## Warnings
+
+### Don't Do These Things
+
+❌ **Don't keep the old 9-tab structure** — It's redundant now
+
+❌ **Don't duplicate Ideation Studio features** — Just link to it
+
+❌ **Don't show generation options when using library content** — They're not relevant
+
+❌ **Don't forget to handle missing content** — If saved content is deleted, handle gracefully
+
+❌ **Don't make ContentPicker inline** — Use a modal/dropdown to save space
+
+### Watch Out For
+
+⚠️ **Content Library might be empty** — Show helpful message + Ideation Studio link
+
+⚠️ **Channel Bible might not exist** — Show setup link, don't break
+
+⚠️ **Template variables** — Validate they exist in the template
+
+⚠️ **Migration** — Existing configs might have old schema, handle gracefully
