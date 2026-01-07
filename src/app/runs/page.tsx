@@ -2,86 +2,26 @@
 
 import Link from 'next/link'
 import { Sidebar } from '@/components/layout/Sidebar'
-
-const ALL_RUNS = [
-  {
-    id: '1',
-    title: 'Top 10 AI Tools for 2024',
-    status: 'running' as const,
-    meta: 'Running - Script generation',
-    time: '2m ago',
-    nodes: [
-      { color: 'var(--node-trigger)', completed: true },
-      { color: 'var(--node-script)', completed: false },
-      { color: 'var(--node-voice)', completed: false },
-      { color: 'var(--node-thumbnail)', completed: false },
-      { color: 'var(--node-assembly)', completed: false },
-      { color: 'var(--node-publish)', completed: false },
-    ],
-  },
-  {
-    id: '2',
-    title: 'Why Python is Taking Over',
-    status: 'success' as const,
-    meta: 'Completed - 8:42 duration',
-    time: '1h ago',
-    nodes: [
-      { color: 'var(--node-trigger)', completed: true },
-      { color: 'var(--node-script)', completed: true },
-      { color: 'var(--node-voice)', completed: true },
-      { color: 'var(--node-thumbnail)', completed: true },
-      { color: 'var(--node-assembly)', completed: true },
-      { color: 'var(--node-publish)', completed: true },
-    ],
-  },
-  {
-    id: '3',
-    title: 'React vs Vue in 2024',
-    status: 'error' as const,
-    meta: 'Failed - Voice generation error',
-    time: '3h ago',
-    nodes: [
-      { color: 'var(--node-trigger)', completed: true },
-      { color: 'var(--node-script)', completed: true },
-      { color: 'var(--status-error)', completed: true },
-      { color: 'var(--node-thumbnail)', completed: false },
-      { color: 'var(--node-assembly)', completed: false },
-      { color: 'var(--node-publish)', completed: false },
-    ],
-  },
-  {
-    id: '4',
-    title: '5 JavaScript Tips You Need',
-    status: 'success' as const,
-    meta: 'Completed - 6:15 duration',
-    time: 'Yesterday',
-    nodes: [
-      { color: 'var(--node-trigger)', completed: true },
-      { color: 'var(--node-script)', completed: true },
-      { color: 'var(--node-voice)', completed: true },
-      { color: 'var(--node-thumbnail)', completed: true },
-      { color: 'var(--node-assembly)', completed: true },
-      { color: 'var(--node-publish)', completed: true },
-    ],
-  },
-  {
-    id: '5',
-    title: 'Building a SaaS in 30 Days',
-    status: 'success' as const,
-    meta: 'Completed - 12:30 duration',
-    time: '2 days ago',
-    nodes: [
-      { color: 'var(--node-trigger)', completed: true },
-      { color: 'var(--node-script)', completed: true },
-      { color: 'var(--node-voice)', completed: true },
-      { color: 'var(--node-thumbnail)', completed: true },
-      { color: 'var(--node-assembly)', completed: true },
-      { color: 'var(--node-publish)', completed: true },
-    ],
-  },
-]
+import { useRunStore } from '@/stores/runStore'
 
 export default function RunsListPage() {
+  const { runId, status, nodeProgress, startedAt } = useRunStore()
+
+  const hasActiveRun = runId !== null
+
+  const nodeIds = ['script', 'voice', 'thumbnail', 'assembly', 'publish'] as const
+  const nodeColors: Record<string, string> = {
+    script: 'var(--node-script)',
+    voice: 'var(--node-voice)',
+    thumbnail: 'var(--node-thumbnail)',
+    assembly: 'var(--node-assembly)',
+    publish: 'var(--node-publish)',
+  }
+
+  const overallStatus = status === 'completed' ? 'success'
+    : status === 'failed' ? 'error'
+    : 'running'
+
   return (
     <div className="app">
       <Sidebar />
@@ -91,32 +31,51 @@ export default function RunsListPage() {
         </header>
 
         <div className="dashboard">
-          <div className="runs-list">
-            {ALL_RUNS.map((run) => (
-              <Link key={run.id} href={`/runs/${run.id}`} className="run-item">
-                <div className={`run-status ${run.status}`}></div>
+          {!hasActiveRun ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="48" height="48">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+              </div>
+              <h3 className="empty-state-title">No runs yet</h3>
+              <p className="empty-state-text">
+                Start a pipeline from the <Link href="/pipeline" style={{ color: 'var(--accent-primary)' }}>Pipeline Editor</Link> to see your runs here.
+              </p>
+            </div>
+          ) : (
+            <div className="runs-list">
+              <Link href={`/runs/${runId}`} className="run-item">
+                <div className={`run-status ${overallStatus}`}></div>
                 <div className="run-info">
-                  <div className="run-title">{run.title}</div>
+                  <div className="run-title">Run {runId}</div>
                   <div className="run-meta">
-                    <span>{run.meta}</span>
+                    <span>{status}</span>
                   </div>
                 </div>
                 <div className="run-nodes">
-                  {run.nodes.map((node, i) => (
-                    <div
-                      key={i}
-                      className="run-node-dot"
-                      style={{
-                        background: node.color,
-                        opacity: node.completed ? 1 : 0.3,
-                      }}
-                    />
-                  ))}
+                  {nodeIds.map((nodeId) => {
+                    const node = nodeProgress[nodeId]
+                    const isCompleted = node?.status === 'completed'
+                    const isFailed = node?.status === 'failed'
+                    return (
+                      <div
+                        key={nodeId}
+                        className="run-node-dot"
+                        style={{
+                          background: isFailed ? 'var(--status-error)' : nodeColors[nodeId],
+                          opacity: isCompleted || isFailed ? 1 : 0.3,
+                        }}
+                      />
+                    )
+                  })}
                 </div>
-                <div className="run-time">{run.time}</div>
+                <div className="run-time">
+                  {startedAt ? new Date(startedAt).toLocaleTimeString() : '-'}
+                </div>
               </Link>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
