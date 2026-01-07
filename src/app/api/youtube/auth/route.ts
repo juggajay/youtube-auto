@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
   const clientId = process.env.YOUTUBE_CLIENT_ID;
   const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const redirectUri = process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:3000/api/youtube/auth/callback';
 
   if (!clientId || !clientSecret) {
     return NextResponse.json(
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const oauth2Client = createOAuth2Client({
     clientId,
     clientSecret,
-    redirectUri: `${appUrl}/api/youtube/auth/callback`,
+    redirectUri,
   });
 
   const authUrl = oauth2Client.generateAuthUrl({

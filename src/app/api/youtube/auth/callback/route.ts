@@ -21,6 +21,7 @@ export async function GET(request: Request) {
   try {
     const clientId = process.env.YOUTUBE_CLIENT_ID;
     const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
+    const redirectUri = process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:3000/api/youtube/auth/callback';
 
     if (!clientId || !clientSecret) {
       return NextResponse.redirect(`${appUrl}/settings?error=oauth_not_configured`);
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
     const oauth2Client = createOAuth2Client({
       clientId,
       clientSecret,
-      redirectUri: `${appUrl}/api/youtube/auth/callback`,
+      redirectUri,
     });
 
     const tokens = await exchangeCodeForTokens(oauth2Client, code);

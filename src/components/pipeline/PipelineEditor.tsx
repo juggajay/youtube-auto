@@ -27,6 +27,8 @@ import { VoicePanel } from '@/components/nodes/panels/voice/VoicePanel'
 import { ThumbnailPanel } from '@/components/nodes/panels/thumbnail/ThumbnailPanel'
 import { AssemblyPanel } from '@/components/nodes/panels/assembly/AssemblyPanel'
 import { PublishPanel } from '@/components/nodes/panels/publish/PublishPanel'
+import { useIdeationStore } from '@/stores/ideationStore'
+import { useRunStore, NodeId } from '@/stores/runStore'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const NODE_TYPES: Record<string, any> = {
@@ -242,10 +244,106 @@ function PipelineEditorInner() {
     fitView({ padding: 0.2 })
   }, [fitView])
 
-  // Run pipeline (placeholder)
-  const handleRunPipeline = useCallback(() => {
-    alert('Pipeline run would start here! This will trigger the execution of all nodes in sequence.')
-  }, [])
+  // Get ideation data
+  const { topic, generatedHooks, selectedHookIds, generatedTitles, selectedTitleIds, editedDescription, archetype } = useIdeationStore()
+
+  // Get run store actions
+  const { startRun, startNode, completeNode, failNode, completeRun, failRun, addLog, status: runStatus, reset: resetRun } = useRunStore()
+
+  // Run pipeline
+  const handleRunPipeline = useCallback(async () => {
+    // Get selected hook and title
+    const selectedHook = generatedHooks.find(h => selectedHookIds.includes(h.id))
+    const selectedTitle = generatedTitles.find(t => selectedTitleIds.includes(t.id))
+
+    // Validate we have required data
+    if (!topic) {
+      alert('Please complete the Ideation flow first. Go to Ideation → enter a topic → select hook → select title.')
+      return
+    }
+
+    // Use defaults if no selection
+    const title = selectedTitle?.content || topic
+    const hook = selectedHook?.content || ''
+    const description = editedDescription || ''
+
+    // Reset and start run
+    resetRun()
+    const runId = `run-${Date.now()}`
+    startRun(runId)
+    addLog({ level: 'info', message: `Starting pipeline for: ${title}` })
+
+    try {
+      // Call pipeline execute API with SSE
+      const response = await fetch('/api/pipeline/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic,
+          title,
+          hook,
+          description,
+          archetype: archetype || 'listicle',
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Pipeline failed: ${response.statusText}`)
+      }
+
+      // Process SSE stream
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('No response body')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              const nodeId = data.node as NodeId
+
+              // Handle different event types
+              if (data.status === 'running') {
+                startNode(nodeId)
+                addLog({ level: 'info', message: `${nodeId}: Starting...`, nodeId })
+              } else if (data.status === 'completed') {
+                completeNode(nodeId, data.data)
+                addLog({ level: 'info', message: `${nodeId}: Completed`, nodeId })
+              } else if (data.status === 'failed') {
+                failNode(nodeId, data.data?.error || 'Unknown error')
+                addLog({ level: 'error', message: `${nodeId}: Failed - ${data.data?.error}`, nodeId })
+              }
+
+              // Check for completion
+              if (data.node === 'complete') {
+                completeRun()
+                addLog({ level: 'info', message: 'Pipeline completed successfully!' })
+              } else if (data.node === 'error') {
+                failRun(data.data?.error || 'Pipeline failed')
+              }
+            } catch (e) {
+              console.error('Failed to parse SSE event:', e)
+            }
+          }
+        }
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      failRun(errorMessage)
+      addLog({ level: 'error', message: `Pipeline error: ${errorMessage}` })
+      alert(`Pipeline failed: ${errorMessage}`)
+    }
+  }, [topic, generatedHooks, selectedHookIds, generatedTitles, selectedTitleIds, editedDescription, archetype, resetRun, startRun, startNode, completeNode, failNode, completeRun, failRun, addLog])
 
   // Calculate estimated cost
   const estimatedCost = useMemo(() => {
@@ -296,11 +394,22 @@ function PipelineEditorInner() {
         </div>
         <div className="toolbar-group" style={{ marginLeft: 'auto', borderRight: 'none' }}>
           <div className="run-button-group">
-            <button className="run-button-main" onClick={handleRunPipeline}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
-              Run Pipeline
+            <button
+              className="run-button-main"
+              onClick={handleRunPipeline}
+              disabled={runStatus === 'running'}
+              style={{ opacity: runStatus === 'running' ? 0.7 : 1 }}
+            >
+              {runStatus === 'running' ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                  <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12"/>
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+              )}
+              {runStatus === 'running' ? 'Running...' : 'Run Pipeline'}
             </button>
             <button className="run-button-cost" title="Estimated API cost for this run">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -453,6 +562,9 @@ function PipelineEditorInner() {
         @keyframes slideIn {
           from { transform: translateX(100%); }
           to { transform: translateX(0); }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
         .react-flow__node {
           cursor: move !important;
